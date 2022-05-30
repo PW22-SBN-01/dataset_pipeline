@@ -9,6 +9,7 @@ import os
 import subprocess
 import signal
 from datetime import datetime, timedelta
+from multiprocessing import Process, Array, Pool, Queue
 import time
 import binascii
 
@@ -83,6 +84,35 @@ class DVRDatasetRecorder:
         return "DVRDatasetRecorder"
 
 
+class AndroidDatasetRecorder:
+
+    """
+        AndroidDatasetRecorder
+    """
+
+    def __init__(self) -> None:
+        # Start TCP Server
+        # Default message to be 'standby'
+        pass
+    
+
+    def start_rec(self, save_file_path=None):
+        try:
+            # Set Server message to 'start_rec @ T+3seconds'
+            while True:
+                pass
+
+        except KeyboardInterrupt:
+            # Set Server message to 'stop_rec'
+            print("Stopped rec at: ", time.time())
+   
+
+    def __str__(self) -> str:
+        return "AndroidDatasetRecorder"
+
+    def __repr__(self) -> str:
+        return "AndroidDatasetRecorder"
+
 class PandaDatasetRecorder:
 
     """
@@ -137,6 +167,17 @@ class PandaDatasetRecorder:
         return "PandaDatasetRecorder"
 
 
+def get_rec_in_process(recorder):
+    #if 'start_rec' not in dir(recorder) or not (recorder.start_rec is callable):
+        #raise Exception("Not a recorder")
+    rec_proc = Process(target=recorder.start_rec, args=())
+    return rec_proc
+
+def stop_process_safely(proc):
+    proc.send_signal(signal.SIGINT)
+    proc.wait(timeout=10)
+    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+
 if __name__ == '__main__':
     username = os.environ.get("DVR_USERNAME")
     password = os.environ.get("DVR_PASSWORD")
@@ -144,20 +185,3 @@ if __name__ == '__main__':
     d = DVRDatasetRecorder(username, password)
     d.start_rec()
     exit()
-    d = PandaDatasetIterator()
-    #d = PandaDatasetIterator('panda_logs/2022-05-24_21:58:04.466338.csv', )
-    print(d)
-    #for i in range(len(d)): print(d[i])
-    exit()
-    d = PandaDatasetRecorder()
-    d.start_rec()
-    exit()
-    d = PhoneDatasetIterator(scale_factor=0.2)
-    print(d)
-
-    for i in range(len(d)):
-        dat, frame = d[i]
-        cv2.imshow('frame', frame)
-        cv2.waitKey(1)
-
-    cv2.destroyAllWindows()
