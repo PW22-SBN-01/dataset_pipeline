@@ -1,6 +1,6 @@
 """
 DatasetHelper.py
-    PhoneDatasetIterator
+    AndroidDatasetIterator
     PandaDatasetRecorder
 """
 

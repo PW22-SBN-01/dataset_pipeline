@@ -1,11 +1,19 @@
 import glob
 import os
+from pathlib import Path
+str(Path(__file__).parent.absolute())
 
-ROOT_DATASET_DIR = "dataset"
-DATASET_DIR = os.path.join(ROOT_DATASET_DIR, "dataset")
+#ROOT_DATASET_DIR = "dataset"
+ROOT_DATASET_DIR = os.path.join(str(Path(__file__).parent.parent.absolute()), "dataset")
+print(ROOT_DATASET_DIR)
+DATASET_DIR = os.path.join(ROOT_DATASET_DIR, "android")
 DATASET_LIST = sorted(glob.glob(DATASET_DIR + "/*"))
+if len(DATASET_LIST)==0:
+    DATASET_LIST = ['dataset/android/']
 PANDA_DIR = os.path.join(ROOT_DATASET_DIR, "panda_logs")
 PANDA_LIST = sorted(glob.glob(PANDA_DIR + "/*.csv"))
+if len(PANDA_LIST)==0:
+    PANDA_LIST = ['dataset/panda_logs/']
 
 PANDA_CACHE_DIR = ".panda_cache"
 

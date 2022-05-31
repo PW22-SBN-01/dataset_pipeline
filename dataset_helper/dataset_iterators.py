@@ -1,10 +1,9 @@
 """
 DatasetHelper.py
-    PhoneDatasetIterator
+    AndroidDatasetIterator
     PandaDatasetRecorder
 """
 
-from calendar import c
 import os
 from datetime import datetime, timedelta
 
@@ -88,6 +87,11 @@ class PandaDatasetIterator:
         timestamp = self.csv_dat.loc[key][0]
         return self.csv_dat.loc[key]
 
+    def get_item_by_timestamp(self, timestamp, fault_delay=0.5):
+        # TODO: Return frame closest to given timestamp
+        # TODO: Raise exception if delta between timestamp and frame is greaterthan fault_delay
+        pass
+
     def __str__(self) -> str:
         res = "----------------------------------------------------" + '\n'
         res += "PandaDatasetIterator('" + self.csv_path + "')" + '\n'
@@ -107,14 +111,11 @@ class PandaDatasetIterator:
         return str(self)
 
 
-class PhoneDatasetIterator:
+class AndroidDatasetIterator:
 
     """
-        PhoneDatasetIterator
+        AndroidDatasetIterator
         Iterates through dataset, given the folder_path
-
-        TODO: Cache and Generate Depth Map data
-        TODO: Generate Map Images
     """
 
     def __init__(self, folder_path=DATASET_LIST[-1], scale_factor=1.0) -> None:
@@ -128,6 +129,7 @@ class PhoneDatasetIterator:
         self.start_time = int(self.id)
         self.csv_path = os.path.join(folder_path, self.id + ".csv")
         self.mp4_path = os.path.join(folder_path, self.id + ".mp4")
+        self.depth_mp4_path = os.path.join(folder_path, "depth_" + self.id + ".mp4")
 
         # CSV stores time in ms
         self.csv_dat = pd.read_csv(self.csv_path)
@@ -186,6 +188,17 @@ class PhoneDatasetIterator:
             ", key=", key
         )
 
+    def generate_depth_map(self):
+        if not os.path.exists(self.depth_mp4_path):
+            # TODO: Generate Depth Map data
+            pass
+
+
+    def get_item_by_timestamp(self, timestamp, fault_delay=0.5):
+        # TODO: Return frame closest to given timestamp
+        # TODO: Raise exception if delta between timestamp and frame is greaterthan fault_delay
+        pass
+
     def __iter__(self):
         self.line_no = 0
         return self
@@ -197,7 +210,7 @@ class PhoneDatasetIterator:
 
     def __str__(self) -> str:
         res = "----------------------------------------------------" + '\n'
-        res += "PhoneDatasetIterator('" + self.folder_path + "')" + '\n'
+        res += "AndroidDatasetIterator('" + self.folder_path + "')" + '\n'
         res += "----------------------------------------------------" + '\n'
         res += "self.fps:        \t" + str(self.fps) + '\n'
         res += "self.frame_count:\t" + str(self.frame_count) + '\n'
@@ -218,6 +231,70 @@ class PhoneDatasetIterator:
         self.cap.release()
 
 
+class MergedDatasetIterator:
+
+    """
+        MergedDatasetIterator
+        Iterates through dataset, given a AndroidDatasetIterator and a PandaDatasetIterator
+    """
+
+    def __init__(self, phone_iter: AndroidDatasetIterator, panda_iter: PandaDatasetIterator) -> None:
+        print("phone_iter:", phone_iter)
+        print("panda_iter:", panda_iter)
+        self.phone_iter = phone_iter
+        self.panda_iter = panda_iter
+        # TODO: Compute the intersection of the two iters
+
+    def __len__(self) -> int:
+        # TODO: Return intersection size
+        pass
+
+    def __getitem__(self, key):
+        if key > len(self):
+            raise IndexError("Out of bounds; key=", key)
+        
+        # TODO: Return the key-th item
+        
+        raise IndexError(
+            "key=", key
+        )
+
+    def __iter__(self):
+        self.line_no = 0
+        return self
+
+    def __next__(self) -> None:
+        data = self.__getitem__(self.line_no)
+        self.line_no += 1
+        return data
+
+    def __str__(self) -> str:
+        res = "----------------------------------------------------" + '\n'
+        res += "MergedDatasetIterator('" + self.folder_path + "')" + '\n'
+        res += "----------------------------------------------------" + '\n'
+        res += "self.frame_count:\t" + str(self.len()) + '\n'
+        res += "self.start_time_csv:\t" + \
+            str(datetime.fromtimestamp(self.start_time_csv/1000)) + '\n'    # TODO
+        res += "self.end_time_csv:\t" + \
+            str(datetime.fromtimestamp(self.end_time_csv/1000)) + '\n'      # TODO
+        res += "self.duration:\t" + \
+            str(timedelta(seconds=self.duration)) + '\n'                    # TODO
+        res += "self.fps:\t" + str(self.fps) + '\n'                         # TODO
+        res += "----------------------------------------------------"
+        return res
+
+    def get_item_by_timestamp(self, timestamp, fault_delay=0.5):
+        # TODO: Return frame closest to given timestamp
+        # TODO: Raise exception if delta between timestamp and frame is greaterthan fault_delay
+        pass
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    def __del__(self):
+        pass
+
+
 if __name__ == '__main__':
     d = PandaDatasetIterator()
     #d = PandaDatasetIterator('panda_logs/2022-05-24_21:58:04.466338.csv', )
@@ -227,7 +304,7 @@ if __name__ == '__main__':
     d = PandaDatasetRecorder()
     d.start_rec()
     exit()
-    d = PhoneDatasetIterator(scale_factor=0.2)
+    d = AndroidDatasetIterator(scale_factor=0.2)
     print(d)
 
     for i in range(len(d)):

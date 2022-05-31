@@ -1,5 +1,7 @@
 # Dataset Helpers
 
+(Raw Dataset Drive Link)[https://drive.google.com/drive/folders/1ouZk8stDobJtpDvYKBPKg0bWNR6bIX-U?usp=sharing]
+
 TODO:
 1. Merged Dataset Recorder
 2. Merged Dataset Iterator
@@ -59,7 +61,7 @@ The raw CAN data comes in with the format `timestamp,CAN_ID,MESSAGE` and is logg
 
 ### Phone Data Iterator
 
-The Android App saved the IMU and GPS data in csv format along with a video to accompany it. The video has a known duration, start time and a fixed frame rate. Using these, the `PhoneDatasetIterator` can generate a mapping from timestamp to video frame.
+The Android App saved the IMU and GPS data in csv format along with a video to accompany it. The video has a known duration, start time and a fixed frame rate. Using these, the `AndroidDatasetIterator` can generate a mapping from timestamp to video frame.
 
 ## Dataset Recorders
 
