@@ -7,6 +7,38 @@ TODO:
 4. Static Code Analysis (pylint, pycodestyle)
 5. Dynamic Code Analysis 
 
+# Project Structure
+
+All the raw dataset files are in the `dataset/` directory.
+
+```
+├── dataset
+│   ├── android
+│   │   ├── 1652937970859
+│   │   │   ├── 1652937970859.csv
+│   │   │   └── 1652937970859.mp4
+│   │   └── 1653972957447
+│   │       ├── 1653972957447.csv
+│   │       └── 1653972957447.mp4
+│   ├── dvr_logs
+│   └── panda_logs
+│       ├── PANDA_2022-05-31_10:25:56.624274.csv
+│       ├── PANDA_2022-05-31_19:31:36.973255.csv
+│       ├── PANDA_2022-05-31_19:33:02.578401.csv
+│       ├── PANDA_2022-05-31_19:35:44.368032.csv
+│       ├── PANDA_2022-05-31_19:39:50.021715.csv
+│       └── PANDA_2022-05-31_19:58:32.016402.csv
+├── dataset_helper
+│   ├── dataset_constants.py
+│   ├── dataset_iterators.py
+│   ├── dataset_recorders.py
+│   ├── dataset_visualizer.py
+│   └── __init__.py
+├── README.ipynb
+├── README.md
+└── record.py
+```
+
 ## Dataset Iterators
 
 The dataset is logged in 3 seperated sources:

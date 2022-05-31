@@ -113,6 +113,34 @@ class AndroidDatasetRecorder:
     def __repr__(self) -> str:
         return "AndroidDatasetRecorder"
 
+class MergedDatasetRecorder:
+
+    """
+        MergedDatasetRecorder
+    """
+
+    def __init__(self) -> None:
+        # Init everything
+        pass
+
+
+    def start_rec(self, save_file_path=None):
+        try:
+            # start recording @ T+3seconds
+            while True:
+                pass
+
+        except KeyboardInterrupt:
+            # stop recording
+            print("Stopped rec at: ", time.time())
+
+
+    def __str__(self) -> str:
+        return "MergedDatasetRecorder"
+
+    def __repr__(self) -> str:
+        return "MergedDatasetRecorder"
+
 class PandaDatasetRecorder:
 
     """
@@ -140,7 +168,8 @@ class PandaDatasetRecorder:
         try:
             print("Recording to: ", save_file_path)
             while True:
-                frames = self.get_frame()
+                # TODO: Raise waring if no frames recieved in last 5 seconds
+                frames = self.get_frame() 
 
                 lines = ""
                 for address, d1, dddat, d2 in frames:
