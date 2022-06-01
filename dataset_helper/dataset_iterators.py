@@ -353,6 +353,48 @@ class MergedDatasetIterator:
         pass
 
 
+class DBCInterpreter:
+
+    """
+        DBCInterpreter
+        Interprets DBC file, given a DBC file path
+    """
+
+    def __init__(self, dbc_path="dbc/honda_city.dbc") -> None:
+        print("dbc_path:", dbc_path)
+        self.dbc_path = dbc_path
+        # TODO: Interpret the DBC file into a dict
+        # TODO: the datatype will have all details like name, bytes, endian-ness, etc.
+        self.id_to_datatype = {}
+
+    def interpret_can_frame(self, data):
+        # TODO: Given a CAN DataFrame from PandaCSVInterpreter, produce output in dict
+        # For example, result = {'throttle':30, 'rpm': 1200, ....}
+        result = {}
+        pass
+
+    def __getitem__(self, key):
+        return self.id_to_datatype[key]
+
+    def __len__(self) -> int:
+        return len(self.id_to_datatype)
+
+    def __str__(self) -> str:
+        res = "----------------------------------------------------" + '\n'
+        res += "DBCInterpreter('" + self.dbc_path + "')" + '\n'
+        res += "----------------------------------------------------" + '\n'
+        for k in self.id_to_datatype: # Print out mapping from ID to data
+            res += str(k) + ":\t" + str(self.id_to_datatype[k]) + '\n'
+        res += "----------------------------------------------------"
+        return res
+
+    def __repr__(self) -> str:
+        return str(self)
+
+    def __del__(self):
+        pass
+
+
 if __name__ == '__main__':
     d = PandaDatasetIterator()
     #d = PandaDatasetIterator('panda_logs/2022-05-24_21:58:04.466338.csv', )
