@@ -1,6 +1,6 @@
 # Dataset Helpers
 
-(Raw Dataset Drive Link)[https://drive.google.com/drive/folders/1ouZk8stDobJtpDvYKBPKg0bWNR6bIX-U?usp=sharing]
+[Raw Dataset Drive Link](https://drive.google.com/drive/folders/1ouZk8stDobJtpDvYKBPKg0bWNR6bIX-U?usp=sharing)
 
 TODO:
 1. Merged Dataset Recorder

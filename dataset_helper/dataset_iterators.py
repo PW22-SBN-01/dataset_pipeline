@@ -87,10 +87,32 @@ class PandaDatasetIterator:
         timestamp = self.csv_dat.loc[key][0]
         return self.csv_dat.loc[key]
 
-    def get_item_by_timestamp(self, timestamp, fault_delay=0.5):
-        # TODO: Return frame closest to given timestamp
-        # TODO: Raise exception if delta between timestamp and frame is greaterthan fault_delay
-        pass
+    def get_item_by_timestamp(self, timestamp, fault_delay=1):
+        """
+        Return frame closest to given timestamp
+        Raise exception if delta between timestamp and frame is greaterthan fault_delay
+        """
+        closest_frames = self.get_item_between_timestamp(timestamp-fault_delay, timestamp+fault_delay, fault_delay=float('inf'))
+        closest_frames = closest_frames.reset_index(drop=True)
+        closest_frame = closest_frames.iloc[(closest_frames['timestamp']-timestamp).abs().argsort()[0]]
+        closest_ts = closest_frame['timestamp']
+        if abs(timestamp - closest_ts) > fault_delay:
+            raise Exception("No such timestamp, fault delay exceeded: abs(timestamp - closest_ts)=" + str(abs(timestamp - closest_ts)))
+        return closest_frame
+
+    def get_item_between_timestamp(self, start_ts, end_ts, fault_delay=0.5):
+        """
+        Return frame between two given timestamps
+        Raise exception if delta between start_ts and minimum_ts is greater than fault_delay
+        Raise exception if delta between end_ts and maximum_ts is greater than fault_delay
+        """
+        ts_dat = self.csv_dat[self.csv_dat['timestamp'].between(start_ts, end_ts)]
+        minimum_ts = min(ts_dat['timestamp'])
+        if abs(minimum_ts - start_ts) > fault_delay:
+            raise Exception("start_ts is out of bounds: abs(minimum_ts - start_ts) > fault_delay")
+        maximum_ts = max(ts_dat['Timestamp'])
+        if abs(maximum_ts - end_ts) > fault_delay:
+            raise Exception("end_ts is out of bounds: abs(maximum_ts - end_ts) > fault_delay")
 
     def __str__(self) -> str:
         res = "----------------------------------------------------" + '\n'
@@ -125,7 +147,7 @@ class AndroidDatasetIterator:
         self.old_frame_number = 0
         self.line_no = 0
 
-        self.id = folder_path.split("/")[1]
+        self.id = folder_path.split("/")[-1]
         self.start_time = int(self.id)
         self.csv_path = os.path.join(folder_path, self.id + ".csv")
         self.mp4_path = os.path.join(folder_path, self.id + ".mp4")
@@ -150,6 +172,8 @@ class AndroidDatasetIterator:
         self.expected_duration = (
             self.end_time_csv - self.start_time_csv
         ) / 1000.0
+
+        self.csv_fps = len(self.csv_dat) / self.expected_duration
 
         # Expected FPS from CSV duration and number of frames
         self.expected_fps = self.frame_count / self.expected_duration
@@ -193,11 +217,36 @@ class AndroidDatasetIterator:
             # TODO: Generate Depth Map data
             pass
 
+    def get_item_by_timestamp(self, timestamp, fault_delay=1000):
+        """
+        Return frame closest to given timestamp
+        Raise exception if delta between timestamp and frame is greaterthan fault_delay
+        """
+        closest_frames = self.get_item_between_timestamp(timestamp-fault_delay, timestamp+fault_delay, fault_delay=float('inf'))
+        closest_frames = closest_frames.reset_index(drop=True)
+        closest_frame = closest_frames.iloc[(closest_frames['Timestamp']-timestamp).abs().argsort()[0]]
+        closest_ts = closest_frame['Timestamp']
+        if abs(timestamp - closest_ts) > fault_delay:
+            raise Exception("No such timestamp, fault delay exceeded: abs(timestamp - closest_ts)=" + str(abs(timestamp - closest_ts)))
+        return closest_frame
 
-    def get_item_by_timestamp(self, timestamp, fault_delay=0.5):
-        # TODO: Return frame closest to given timestamp
-        # TODO: Raise exception if delta between timestamp and frame is greaterthan fault_delay
-        pass
+        
+    def get_item_between_timestamp(self, start_ts, end_ts, fault_delay=500):
+        """
+        Return frame between two given timestamps
+        Raise exception if delta between start_ts and minimum_ts is greater than fault_delay
+        Raise exception if delta between end_ts and maximum_ts is greater than fault_delay
+        """
+        ts_dat = self.csv_dat[self.csv_dat['Timestamp'].between(start_ts, end_ts)]
+        if len(ts_dat)==0:
+            raise Exception("No such timestamp")
+        minimum_ts = min(ts_dat['Timestamp']) / 1000.0
+        if abs(minimum_ts - start_ts) > fault_delay:
+            raise Exception("start_ts is out of bounds: abs(minimum_ts - start_ts)=" + str(abs(minimum_ts - start_ts)))
+        maximum_ts = max(ts_dat['Timestamp']) / 1000.0
+        if abs(maximum_ts - end_ts) > fault_delay:
+            raise Exception("end_ts is out of bounds: abs(minimum_ts - start_ts)=" + str(abs(maximum_ts - end_ts)))
+        return ts_dat
 
     def __iter__(self):
         self.line_no = 0
@@ -221,6 +270,7 @@ class AndroidDatasetIterator:
         res += "self.expected_duration:\t" + \
             str(timedelta(seconds=self.expected_duration)) + '\n'
         res += "self.expected_fps:\t" + str(self.expected_fps) + '\n'
+        res += "self.csv_fps:        \t" + str(self.csv_fps) + '\n'
         res += "----------------------------------------------------"
         return res
 
@@ -228,7 +278,7 @@ class AndroidDatasetIterator:
         return str(self)
 
     def __del__(self):
-        self.cap.release()
+        pass
 
 
 class MergedDatasetIterator:
@@ -283,10 +333,18 @@ class MergedDatasetIterator:
         res += "----------------------------------------------------"
         return res
 
-    def get_item_by_timestamp(self, timestamp, fault_delay=0.5):
-        # TODO: Return frame closest to given timestamp
-        # TODO: Raise exception if delta between timestamp and frame is greaterthan fault_delay
-        pass
+    def get_item_by_timestamp(self, timestamp, fault_delay=1):
+        """
+        Return frame closest to given timestamp
+        Raise exception if delta between timestamp and frame is greaterthan fault_delay
+        """
+        closest_frames = self.get_item_between_timestamp(timestamp-fault_delay, timestamp+fault_delay, fault_delay=float('inf'))
+        closest_frames = closest_frames.reset_index(drop=True)
+        closest_frame = closest_frames.iloc[(closest_frames['timestamp']-timestamp).abs().argsort()[0]]
+        closest_ts = closest_frame['timestamp']
+        if abs(timestamp - closest_ts) > fault_delay:
+            raise Exception("No such timestamp, fault delay exceeded: abs(timestamp - closest_ts)=" + str(abs(timestamp - closest_ts)))
+        return closest_frame
 
     def __repr__(self) -> str:
         return str(self)
