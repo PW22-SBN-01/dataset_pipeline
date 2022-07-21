@@ -3,117 +3,117 @@ import time
 
 class AndroidDatasetVisualizer:
 
-    """
-        AndroidDatasetVisualizer
-    """
+	"""
+		AndroidDatasetVisualizer
+	"""
 
-    def __init__(self) -> None:
-        # Start TCP Server
-        # Default message to be 'standby'
-        pass
-    
+	def __init__(self) -> None:
+		# Start TCP Server
+		# Default message to be 'standby'
+		pass
+	
 
-    def playback(self):
-        try:
-            # Start playing
-            while True:
-                pass
+	def playback(self):
+		try:
+			# Start playing
+			while True:
+				pass
 
-        except KeyboardInterrupt:
-            # Stop playing
-            print("Stopped rec at: ", time.time())
+		except KeyboardInterrupt:
+			# Stop playing
+			print("Stopped rec at: ", time.time())
    
 
-    def __str__(self) -> str:
-        return "AndroidDatasetVisualizer"
+	def __str__(self) -> str:
+		return "AndroidDatasetVisualizer"
 
-    def __repr__(self) -> str:
-        return "AndroidDatasetVisualizer"
+	def __repr__(self) -> str:
+		return "AndroidDatasetVisualizer"
 
 
 class DVRDatasetVisualizer:
 
-    """
-        DVRDatasetVisualizer
-    """
+	"""
+		DVRDatasetVisualizer
+	"""
 
-    def __init__(self) -> None:
-        # Start TCP Server
-        # Default message to be 'standby'
-        pass
-    
+	def __init__(self) -> None:
+		# Start TCP Server
+		# Default message to be 'standby'
+		pass
+	
 
-    def playback(self):
-        try:
-            # Start playing
-            while True:
-                pass
+	def playback(self):
+		try:
+			# Start playing
+			while True:
+				pass
 
-        except KeyboardInterrupt:
-            # Stop playing
-            print("Stopped rec at: ", time.time())
+		except KeyboardInterrupt:
+			# Stop playing
+			print("Stopped rec at: ", time.time())
    
 
-    def __str__(self) -> str:
-        return "DVRDatasetVisualizer"
+	def __str__(self) -> str:
+		return "DVRDatasetVisualizer"
 
-    def __repr__(self) -> str:
-        return "DVRDatasetVisualizer"
+	def __repr__(self) -> str:
+		return "DVRDatasetVisualizer"
 
 
 
 class PandaDatasetVisualizer:
 
-    """
-        PandaDatasetVisualizer
-    """
+	"""
+		PandaDatasetVisualizer
+	"""
 
-    def __init__(self) -> None:
-        pass
-    
+	def __init__(self) -> None:
+		pass
+	
 
-    def playback(self):
-        try:
-            # Start playing
-            while True:
-                pass
+	def playback(self):
+		try:
+			# Start playing
+			while True:
+				pass
 
-        except KeyboardInterrupt:
-            # Stop playing
-            print("Stopped rec at: ", time.time())
+		except KeyboardInterrupt:
+			# Stop playing
+			print("Stopped rec at: ", time.time())
    
 
-    def __str__(self) -> str:
-        return "PandaDatasetVisualizer"
+	def __str__(self) -> str:
+		return "PandaDatasetVisualizer"
 
-    def __repr__(self) -> str:
-        return "PandaDatasetVisualizer"
+	def __repr__(self) -> str:
+		return "PandaDatasetVisualizer"
 
 
 class MergedDatasetVisualizer:
 
-    """
-        MergedDatasetVisualizer
-    """
+	"""
+		MergedDatasetVisualizer
+	"""
 
-    def __init__(self) -> None:
-        # Init everything
-        pass
-
-
-    def playback(self):
-        try:
-            # start recording @ T+3seconds
-            while True:
-                pass
-
-        except KeyboardInterrupt:
-            # stop recording
-            print("Stopped rec at: ", time.time())
+	def __init__(self) -> None:
+		# Init everything
+		pass
 
 
-    def __str__(self) -> str:
-        return "MergedDatasetVisualizer"
+	def playback(self):
+		try:
+			# start recording @ T+3seconds
+			while True:
+				pass
 
-    def __repr__(self) -> str:
-        return "MergedDatasetVisualizer"
+		except KeyboardInterrupt:
+			# stop recording
+			print("Stopped rec at: ", time.time())
+
+
+	def __str__(self) -> str:
+		return "MergedDatasetVisualizer"
+
+	def __repr__(self) -> str:
+		return "MergedDatasetVisualizer"

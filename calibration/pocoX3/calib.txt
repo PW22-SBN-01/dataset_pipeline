@@ -1,0 +1,72 @@
+  cameraIntrinsics with properties:
+
+			 FocalLength: [1.2506e+03 1.2548e+03]
+		  PrincipalPoint: [978.3789 562.0621]
+			   ImageSize: [1080 1920]
+		RadialDistortion: [0.0222 -0.0822]
+	TangentialDistortion: [0 0]
+					Skew: 0
+		 IntrinsicMatrix: [3×3 double]
+
+>> cameraParams.IntrinsicMatrix
+
+ans =
+
+   1.0e+03 *
+
+	1.2506		 0		 0
+		 0	1.2548		 0
+	0.9784	0.5621	0.0010
+------------------------------
+>> cameraParams.IntrinsicMatrix
+
+ans =
+
+   1.0e+03 *
+
+	1.2702		 0		 0
+	0.0007	1.2717		 0
+	1.0126	0.5642	0.0010
+
+>> cameraParams;
+>> cameraParams
+
+cameraParams = 
+
+  cameraParameters with properties:
+
+   Camera Intrinsics
+						 Intrinsics: [1×1 cameraIntrinsics]
+
+   Camera Extrinsics
+				   RotationMatrices: [3×3×136 double]
+				 TranslationVectors: [136×3 double]
+
+   Accuracy of Estimation
+			  MeanReprojectionError: 0.7991
+				 ReprojectionErrors: [28×2×136 double]
+				  ReprojectedPoints: [28×2×136 double]
+
+   Calibration Settings
+						NumPatterns: 136
+				  DetectedKeypoints: [28×136 logical]
+						WorldPoints: [28×2 double]
+						 WorldUnits: 'millimeters'
+					   EstimateSkew: 1
+	NumRadialDistortionCoefficients: 3
+	   EstimateTangentialDistortion: 1
+
+>>
+>> cameraParams.Intrinsics
+
+ans = 
+
+  cameraIntrinsics with properties:
+
+			 FocalLength: [1.2702e+03 1.2717e+03]
+		  PrincipalPoint: [1.0126e+03 564.1934]
+			   ImageSize: [1080 1920]
+		RadialDistortion: [0.0936 -0.5403 0.7632]
+	TangentialDistortion: [7.2525e-04 0.0084]
+					Skew: 0.6853
+		 IntrinsicMatrix: [3×3 double]

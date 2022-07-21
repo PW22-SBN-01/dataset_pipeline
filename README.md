@@ -20,16 +20,16 @@ All the raw dataset files are in the `dataset/` directory.
 │   │   │   ├── 1652937970859.csv
 │   │   │   └── 1652937970859.mp4
 │   │   └── 1653972957447
-│   │       ├── 1653972957447.csv
-│   │       └── 1653972957447.mp4
+│   │  	 ├── 1653972957447.csv
+│   │  	 └── 1653972957447.mp4
 │   ├── dvr_logs
 │   └── panda_logs
-│       ├── PANDA_2022-05-31_10:25:56.624274.csv
-│       ├── PANDA_2022-05-31_19:31:36.973255.csv
-│       ├── PANDA_2022-05-31_19:33:02.578401.csv
-│       ├── PANDA_2022-05-31_19:35:44.368032.csv
-│       ├── PANDA_2022-05-31_19:39:50.021715.csv
-│       └── PANDA_2022-05-31_19:58:32.016402.csv
+│  	 ├── PANDA_2022-05-31_10:25:56.624274.csv
+│  	 ├── PANDA_2022-05-31_19:31:36.973255.csv
+│  	 ├── PANDA_2022-05-31_19:33:02.578401.csv
+│  	 ├── PANDA_2022-05-31_19:35:44.368032.csv
+│  	 ├── PANDA_2022-05-31_19:39:50.021715.csv
+│  	 └── PANDA_2022-05-31_19:58:32.016402.csv
 ├── dataset_helper
 │   ├── dataset_constants.py
 │   ├── dataset_iterators.py
@@ -45,13 +45,13 @@ All the raw dataset files are in the `dataset/` directory.
 
 The dataset is logged in 3 seperated sources:
 1. Android Phone(s)
-    a. CSV
-    b. Video File
+	a. CSV
+	b. Video File
 2. Panda (CAN BUS Data)
-    a. CSV file only
+	a. CSV file only
 3. DVR Video
-    a. Multiple Video Streams
-    b. Log files
+	a. Multiple Video Streams
+	b. Log files
 
 The `dataset_iterators.py` file provides classes to easily access the recorded data as panda's `DataFrame` objects
 
