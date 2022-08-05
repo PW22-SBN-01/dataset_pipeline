@@ -12,6 +12,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from .dataset_constants import *
+from . import helper
 
 class PandaDatasetIterator:
 
@@ -87,7 +88,7 @@ class PandaDatasetIterator:
 		timestamp = self.csv_dat.loc[key][0]
 		return self.csv_dat.loc[key]
 
-	def get_item_by_timestamp(self, timestamp, fault_delay=1):
+	def get_item_by_timestamp(self, timestamp, fault_delay=1.0):
 		"""
 		Return frame closest to given timestamp
 		Raise exception if delta between timestamp and frame is greaterthan fault_delay
@@ -110,9 +111,10 @@ class PandaDatasetIterator:
 		minimum_ts = min(ts_dat['timestamp'])
 		if abs(minimum_ts - start_ts) > fault_delay:
 			raise Exception("start_ts is out of bounds: abs(minimum_ts - start_ts) > fault_delay")
-		maximum_ts = max(ts_dat['Timestamp'])
+		maximum_ts = max(ts_dat['timestamp'])
 		if abs(maximum_ts - end_ts) > fault_delay:
 			raise Exception("end_ts is out of bounds: abs(maximum_ts - end_ts) > fault_delay")
+		return ts_dat
 
 	def __str__(self) -> str:
 		res = "----------------------------------------------------" + '\n'
@@ -229,7 +231,10 @@ class AndroidDatasetIterator:
 		closest_ts = closest_frame['Timestamp']
 		if abs(timestamp - closest_ts) > fault_delay:
 			raise Exception("No such timestamp, fault delay exceeded: abs(timestamp - closest_ts)=" + str(abs(timestamp - closest_ts)))
-		return closest_frame
+		
+		closest_ts_index = self.csv_dat.index[self.csv_dat['Timestamp'] == closest_ts].tolist()[0]
+		return self.__getitem__(closest_ts_index)
+		# return closest_frame
 
 		
 	def get_item_between_timestamp(self, start_ts, end_ts, fault_delay=500):
@@ -241,10 +246,10 @@ class AndroidDatasetIterator:
 		ts_dat = self.csv_dat[self.csv_dat['Timestamp'].between(start_ts, end_ts)]
 		if len(ts_dat)==0:
 			raise Exception("No such timestamp")
-		minimum_ts = min(ts_dat['Timestamp']) / 1000.0
+		minimum_ts = min(ts_dat['Timestamp']) #/ 1000.0
 		if abs(minimum_ts - start_ts) > fault_delay:
 			raise Exception("start_ts is out of bounds: abs(minimum_ts - start_ts)=" + str(abs(minimum_ts - start_ts)))
-		maximum_ts = max(ts_dat['Timestamp']) / 1000.0
+		maximum_ts = max(ts_dat['Timestamp']) #/ 1000.0
 		if abs(maximum_ts - end_ts) > fault_delay:
 			raise Exception("end_ts is out of bounds: abs(minimum_ts - start_ts)=" + str(abs(maximum_ts - end_ts)))
 		return ts_dat
@@ -292,21 +297,43 @@ class MergedDatasetIterator:
 	def __init__(self, phone_iter: AndroidDatasetIterator, panda_iter: PandaDatasetIterator) -> None:
 		self.phone_iter = phone_iter
 		self.panda_iter = panda_iter
-		# TODO: Compute the intersection of the two iters
+		self.group = [
+			(self.phone_iter.start_time_csv /1000.0, self.phone_iter.end_time_csv /1000.0),
+			(self.panda_iter.start_time_csv, self.panda_iter.end_time_csv)
+		]
+		self.start_time, self.end_time = helper.intersection_of_group(self.group)
+		self.duration = self.end_time - self.start_time
+		self.IOU = helper.IOU_of_group(self.group)
+		
+		self.phone_dat = self.phone_iter.get_item_between_timestamp(self.start_time*1000.0, self.end_time*1000.0)
+		#self.phone_dat = self.phone_iter.get_item_between_timestamp(self.start_time, self.end_time)
+		self.phone_frame_count = len(self.phone_dat)
+		self.phone_fps = self.phone_frame_count / self.duration
+		
+		self.panda_dat = self.panda_iter.get_item_between_timestamp(self.start_time, self.end_time)
+		self.panda_frame_count = len(self.panda_dat)
+		self.panda_fps = self.panda_frame_count / self.duration
+
+		self.frame_count = max(self.phone_frame_count, self.panda_frame_count)
+		self.fps = max(self.phone_fps, self.panda_fps)
+
 
 	def __len__(self) -> int:
-		# TODO: Return intersection size
-		pass
+		return self.frame_count
 
 	def __getitem__(self, key):
 		if key > len(self):
 			raise IndexError("Out of bounds; key=", key)
 		
-		# TODO: Return the key-th item
+		frame_ts = self.start_time + key / self.fps # frame timestamp in seconds
+		panda_frame = self.panda_iter.get_item_by_timestamp(frame_ts)
+		phone_frame = self.phone_iter.get_item_by_timestamp(frame_ts*1000.0)
+		#phone_frame = self.phone_iter[key]
 		
-		raise IndexError(
-			"key=", key
-		)
+		return {
+			'panda_frame': panda_frame,
+			'phone_frame': phone_frame,
+		}
 
 	def __iter__(self):
 		self.line_no = 0
@@ -322,13 +349,16 @@ class MergedDatasetIterator:
 		res += "MergedDatasetIterator" + '\n'
 		res += "----------------------------------------------------" + '\n'
 		# res += "self.frame_count:\t" + str(self.len()) + '\n'
-		# res += "self.start_time_csv:\t" + \
-		#	 str(datetime.fromtimestamp(self.start_time_csv/1000)) + '\n'	# TODO
-		# res += "self.end_time_csv:\t" + \
-		#	 str(datetime.fromtimestamp(self.end_time_csv/1000)) + '\n'	  # TODO
-		# res += "self.duration:\t" + \
-		#	 str(timedelta(seconds=self.duration)) + '\n'					# TODO
-		# res += "self.fps:\t" + str(self.fps) + '\n'						 # TODO
+		res += "self.start_time:\t" + \
+			 str(datetime.fromtimestamp(self.start_time)) + '\n'
+		res += "self.end_time:\t\t" + \
+			 str(datetime.fromtimestamp(self.end_time)) + '\n'
+		res += "self.duration:\t\t" + \
+			 str(timedelta(seconds=self.duration)) + '\n'
+		res += "self.IOU:\t\t" + \
+			 str(round(self.IOU*100, 2)) + " %" + '\n'
+		res += "self.frame_count:\t" + str(self.frame_count) + '\n'
+		res += "self.fps:\t" + str(self.fps) + '\n'
 		res += "----------------------------------------------------"
 		return res
 
@@ -344,6 +374,23 @@ class MergedDatasetIterator:
 		if abs(timestamp - closest_ts) > fault_delay:
 			raise Exception("No such timestamp, fault delay exceeded: abs(timestamp - closest_ts)=" + str(abs(timestamp - closest_ts)))
 		return closest_frame
+
+	def get_item_between_timestamp(self, start_ts, end_ts, fault_delay=0.5):
+		"""
+		Return frame between two given timestamps
+		Raise exception if delta between start_ts and minimum_ts is greater than fault_delay
+		Raise exception if delta between end_ts and maximum_ts is greater than fault_delay
+		"""
+		# ts_dat = self.csv_dat[self.csv_dat['timestamp'].between(start_ts, end_ts)]
+		# minimum_ts = min(ts_dat['timestamp'])
+		# if abs(minimum_ts - start_ts) > fault_delay:
+		# 	raise Exception("start_ts is out of bounds: abs(minimum_ts - start_ts) > fault_delay")
+		# maximum_ts = max(ts_dat['Timestamp'])
+		
+		# if abs(maximum_ts - end_ts) > fault_delay:
+		# 	raise Exception("end_ts is out of bounds: abs(maximum_ts - end_ts) > fault_delay")
+		# TODO
+		pass
 
 	def __repr__(self) -> str:
 		return str(self)
@@ -400,4 +447,9 @@ if __name__ == '__main__':
 	phone_iter = AndroidDatasetIterator('dataset/android/1658384924059')
 	merged_iter = MergedDatasetIterator(panda_iter=panda_iter, phone_iter=phone_iter)
 
+	print(panda_iter)
+	print(phone_iter)
 	print(merged_iter)
+
+	for frame in merged_iter:
+		print(frame)
