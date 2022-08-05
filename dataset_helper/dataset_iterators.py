@@ -6,10 +6,13 @@ DatasetHelper.py
 
 import os
 from datetime import datetime, timedelta
+import binascii
+import math
 
 import cv2
 import pandas as pd
 from tqdm import tqdm
+import cantools
 
 from .dataset_constants import *
 from . import helper
@@ -20,8 +23,10 @@ class PandaDatasetIterator:
 		PandaDatasetIterator
 	"""
 
-	def __init__(self, csv_path=PANDA_LIST[-1], invalidate_cache=False) -> None:
+	def __init__(self, csv_path, dbc_interp, invalidate_cache=False) -> None:
 		print("Init path:", csv_path)
+		assert type(dbc_interp) == DBCInterpreter
+		self.dbc_interp = dbc_interp 
 		self.csv_path = csv_path
 		self.folder_path = os.path.dirname(csv_path)
 		cached_csv_folder = os.path.join(self.folder_path, PANDA_CACHE_DIR)
@@ -409,6 +414,7 @@ class DBCInterpreter:
 	def __init__(self, dbc_path="dbc/honda_city.dbc") -> None:
 		print("dbc_path:", dbc_path)
 		self.dbc_path = dbc_path
+		self.db = cantools.database.load_file(self.dbc_path)
 		# TODO: Interpret the DBC file into a dict
 		# TODO: the datatype will have all details like name, bytes, endian-ness, etc.
 		self.id_to_datatype = {}
@@ -417,7 +423,24 @@ class DBCInterpreter:
 		# TODO: Given a CAN DataFrame from PandaCSVInterpreter, produce output in dict
 		# For example, result = {'throttle':30, 'rpm': 1200, ....}
 		result = {}
-		pass
+		for key in data.keys():
+			if key!='timestamp':
+				try:
+					# print(key, data[key], type(data[key]))
+					if type(data[key])==str:
+						tuple_dat = eval(data[key])
+						hex_frame = binascii.unhexlify(eval(tuple_dat[1]))
+						new_dict = self.db.decode_message(int(key), hex_frame)
+						for k in new_dict:
+							result[k] = new_dict[k]
+						# print(type(hex_frame), hex_frame)
+						# print()
+				except KeyError:
+					pass
+				except ValueError:
+					pass
+				
+		return result
 
 	def __getitem__(self, key):
 		return self.id_to_datatype[key]
@@ -442,14 +465,17 @@ class DBCInterpreter:
 
 
 if __name__ == '__main__':
+	dbc_interp = DBCInterpreter("dbc/honda_city.dbc")
 	panda_path = os.path.join("dataset/panda_logs/PANDA_2022-07-21_11:54:32.114482.csv")
-	panda_iter = PandaDatasetIterator(panda_path)
-	phone_iter = AndroidDatasetIterator('dataset/android/1658384924059')
-	merged_iter = MergedDatasetIterator(panda_iter=panda_iter, phone_iter=phone_iter)
+	panda_iter = PandaDatasetIterator(panda_path, dbc_interp=dbc_interp)
+	# phone_iter = AndroidDatasetIterator('dataset/android/1658384924059')
+	# merged_iter = MergedDatasetIterator(panda_iter=panda_iter, phone_iter=phone_iter)
 
 	print(panda_iter)
-	print(phone_iter)
-	print(merged_iter)
+	# print(phone_iter)
+	# print(merged_iter)
 
-	for frame in merged_iter:
-		print(frame)
+	# for frame in merged_iter:
+	# 	print(frame)
+
+	

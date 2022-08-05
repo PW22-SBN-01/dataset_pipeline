@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import matplotlib.cm
 
-from .dataset_iterators import MergedDatasetIterator, AndroidDatasetIterator, PandaDatasetIterator
+from .dataset_iterators import MergedDatasetIterator, AndroidDatasetIterator, PandaDatasetIterator, DBCInterpreter
 
 class AndroidDatasetVisualizer:
 
@@ -47,6 +47,7 @@ class AndroidDatasetVisualizer:
 		try:
 			# Start playing
 			for data_frame, img_frame in self.phone_iter:
+
 				longitude = data_frame['Longitude']
 				latitude = data_frame['Latitude']
 				x_pos = int((longitude - self.min_longitude) / (self.max_longitude - self.min_longitude) * self.gps_size + self.padding//2)
@@ -125,7 +126,9 @@ class PandaDatasetVisualizer:
 		PandaDatasetVisualizer
 	"""
 
-	def __init__(self) -> None:
+	def __init__(self, panda_iter) -> None:
+		assert type(panda_iter) == PandaDatasetIterator
+		self.panda_iter = panda_iter
 		pass
 	
 
@@ -133,7 +136,9 @@ class PandaDatasetVisualizer:
 		try:
 			# Start playing
 			for data_frame in self.panda_iter:
-				pass
+				# print(data_frame)
+				# print(self.panda_iter.dbc_interp)
+				print(self.panda_iter.dbc_interp.interpret_can_frame(data_frame))
 
 		except KeyboardInterrupt:
 			# Stop playing
@@ -186,12 +191,16 @@ class MergedDatasetVisualizer:
 
 
 if __name__=="__main__":
+	dbc_interp = DBCInterpreter("dbc/honda_city.dbc")
+
 	panda_path = os.path.join("dataset/panda_logs/PANDA_2022-07-21_11:54:32.114482.csv")
-	panda_iter = PandaDatasetIterator(panda_path)
+	panda_iter = PandaDatasetIterator(panda_path, dbc_interp=dbc_interp)
 	phone_iter = AndroidDatasetIterator('dataset/android/1658384924059')
 	merged_iter = MergedDatasetIterator(panda_iter=panda_iter, phone_iter=phone_iter)
 
 	# merged_vis = MergedDatasetVisualizer(merged_iter, 0.25)
 	# merged_vis.playback()
-	phone_vis = AndroidDatasetVisualizer(phone_iter, gps_size=384, scale_factor=0.5, line_thickness=3)
-	phone_vis.playback()
+	# phone_vis = AndroidDatasetVisualizer(phone_iter, gps_size=384, scale_factor=0.5, line_thickness=3)
+	# phone_vis.playback()
+	panda_vis = PandaDatasetVisualizer(panda_iter=panda_iter)
+	panda_vis.playback()
