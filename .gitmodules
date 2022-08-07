@@ -1,0 +1,6 @@
+[submodule "pyslam"]
+	path = pyslam
+	url = https://github.com/luigifreda/pyslam
+[submodule "dataset_helper/extras/pyslam"]
+	path = dataset_helper/extras/pyslam
+	url = https://github.com/luigifreda/pyslam
