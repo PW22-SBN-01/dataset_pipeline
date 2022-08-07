@@ -4,11 +4,14 @@ DatasetHelper.py
 	PandaDatasetRecorder
 """
 
+from operator import inv
 import os
 from datetime import datetime, timedelta
 import binascii
 import math
 import numpy as np
+import sys
+import pathlib
 
 import cv2
 import pandas as pd
@@ -18,15 +21,6 @@ import yaml
 
 from .dataset_constants import *
 from . import helper
-
-import sys
-import pathlib
-sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), "extras/pyslam"))
-# from extras.pyslam.visual_odometry import VisualOdometry
-from visual_odometry import VisualOdometry
-from camera  import PinholeCamera
-from feature_tracker_configs import FeatureTrackerConfigs
-from feature_tracker import feature_tracker_factory
 
 class PandaDatasetIterator:
 
@@ -310,7 +304,16 @@ class MergedDatasetIterator:
 		Iterates through dataset, given a AndroidDatasetIterator and a PandaDatasetIterator
 	"""
 
-	def __init__(self, phone_iter: AndroidDatasetIterator, panda_iter: PandaDatasetIterator, settings_doc="calibration/pocoX3/calib.yaml") -> None:
+	def __init__(self, 
+		phone_iter: AndroidDatasetIterator, 
+		panda_iter: PandaDatasetIterator, 
+		settings_doc="calibration/pocoX3/calib.yaml", 
+		compute_trajectory=False, 
+		invalidate_cache=False
+	) -> None:
+		assert type(phone_iter)==AndroidDatasetIterator
+		assert type(panda_iter)==PandaDatasetIterator
+		# TODO: Generate ID for this pair of phone_iter and panda_iter
 		self.phone_iter = phone_iter
 		self.panda_iter = panda_iter
 		self.group = [
@@ -348,9 +351,32 @@ class MergedDatasetIterator:
 			k3 = self.cam_settings['Camera.k3']
 		self.DistCoef = np.array([k1, k2, p1, p2, k3])
 
-		self.compute_slam()
+		if compute_trajectory:
+			self.folder_path = os.path.dirname(self.phone_iter.csv_path)
+			cached_csv_folder = os.path.join(self.folder_path, TRAJECTORY_CACHE_DIR)
+			os.makedirs(cached_csv_folder, exist_ok=True)
+			self.cached_csv_path = os.path.join(cached_csv_folder, os.path.basename(self.phone_iter.csv_path))
+			if not os.path.exists(self.cached_csv_path) or invalidate_cache:
+				self.compute_slam()
+			else:
+				self.trajectory = pd.read_csv(self.cached_csv_path)
+		else: 
+			self.trajectory = pd.DataFrame({
+				'x':[], 'y':[], 'z': []
+			})
 	
 	def compute_slam(self):
+		sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), "extras/pyslam"))
+		# from extras.pyslam.visual_odometry import VisualOdometry
+		from visual_odometry import VisualOdometry
+		from camera  import PinholeCamera
+		from feature_tracker_configs import FeatureTrackerConfigs
+		from feature_tracker import feature_tracker_factory
+
+		self.trajectory = {
+			'x':[], 'y':[], 'z': []
+		}
+
 		cam = PinholeCamera(
 			self.cam_settings['Camera.width'], 
 			self.cam_settings['Camera.height'],
@@ -385,6 +411,14 @@ class MergedDatasetIterator:
 				x, y, z = self.vo.traj3d_est[-1]
 			else:
 				x, y, z = 0.0, 0.0, 0.0
+
+			self.trajectory['x'] += [x]
+			self.trajectory['y'] += [y]
+			self.trajectory['z'] += [z]
+			break
+
+		self.trajectory = pd.DataFrame(self.trajectory)
+		self.trajectory.to_csv(self.cached_csv_path, index=False)
 
 
 	def __len__(self) -> int:
@@ -533,7 +567,7 @@ if __name__ == '__main__':
 	panda_path = os.path.join("dataset/panda_logs/PANDA_2022-07-21_11:54:32.114482.csv")
 	panda_iter = PandaDatasetIterator(panda_path, dbc_interp=dbc_interp)
 	phone_iter = AndroidDatasetIterator('dataset/android/1658384924059')
-	merged_iter = MergedDatasetIterator(panda_iter=panda_iter, phone_iter=phone_iter)
+	merged_iter = MergedDatasetIterator(panda_iter=panda_iter, phone_iter=phone_iter, compute_trajectory=False)
 
 	# print(panda_iter)
 	# print(phone_iter)

@@ -16,6 +16,7 @@ if len(PANDA_LIST)==0:
 	PANDA_LIST = ['dataset/panda_logs/']
 	
 PANDA_CACHE_DIR = ".panda_cache"
+TRAJECTORY_CACHE_DIR = ".trajectory_cache"
 
 WRITE_BUFFER_SIZE = 10
 
