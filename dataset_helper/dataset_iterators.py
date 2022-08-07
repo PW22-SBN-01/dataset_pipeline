@@ -8,14 +8,25 @@ import os
 from datetime import datetime, timedelta
 import binascii
 import math
+import numpy as np
 
 import cv2
 import pandas as pd
 from tqdm import tqdm
 import cantools
+import yaml
 
 from .dataset_constants import *
 from . import helper
+
+import sys
+import pathlib
+sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), "extras/pyslam"))
+# from extras.pyslam.visual_odometry import VisualOdometry
+from visual_odometry import VisualOdometry
+from camera  import PinholeCamera
+from feature_tracker_configs import FeatureTrackerConfigs
+from feature_tracker import feature_tracker_factory
 
 class PandaDatasetIterator:
 
@@ -299,7 +310,7 @@ class MergedDatasetIterator:
 		Iterates through dataset, given a AndroidDatasetIterator and a PandaDatasetIterator
 	"""
 
-	def __init__(self, phone_iter: AndroidDatasetIterator, panda_iter: PandaDatasetIterator) -> None:
+	def __init__(self, phone_iter: AndroidDatasetIterator, panda_iter: PandaDatasetIterator, settings_doc="calibration/pocoX3/calib.yaml") -> None:
 		self.phone_iter = phone_iter
 		self.panda_iter = panda_iter
 		self.group = [
@@ -321,6 +332,59 @@ class MergedDatasetIterator:
 
 		self.frame_count = max(self.phone_frame_count, self.panda_frame_count)
 		self.fps = max(self.phone_fps, self.panda_fps)
+
+		self.settings_doc = settings_doc
+		with open(self.settings_doc, 'r') as stream:
+			try:
+				self.cam_settings = yaml.load(stream, Loader=yaml.FullLoader)
+			except yaml.YAMLError as exc:
+				print(exc)
+		k1 = self.cam_settings['Camera.k1']
+		k2 = self.cam_settings['Camera.k2']
+		p1 = self.cam_settings['Camera.p1']
+		p2 = self.cam_settings['Camera.p2']
+		k3 = 0
+		if 'Camera.k3' in self.cam_settings:
+			k3 = self.cam_settings['Camera.k3']
+		self.DistCoef = np.array([k1, k2, p1, p2, k3])
+
+		self.compute_slam()
+	
+	def compute_slam(self):
+		cam = PinholeCamera(
+			self.cam_settings['Camera.width'], 
+			self.cam_settings['Camera.height'],
+			self.cam_settings['Camera.fx'],
+			self.cam_settings['Camera.fy'],
+			self.cam_settings['Camera.cx'],
+			self.cam_settings['Camera.cy'],
+			self.DistCoef,
+			self.cam_settings['Camera.fps']
+		)
+		num_features=2000  # how many features do you want to detect and track?
+
+		# select your tracker configuration (see the file feature_tracker_configs.py) 
+		# LK_SHI_TOMASI, LK_FAST
+		# SHI_TOMASI_ORB, FAST_ORB, ORB, BRISK, AKAZE, FAST_FREAK, SIFT, ROOT_SIFT, SURF, SUPERPOINT, FAST_TFEAT
+		tracker_config = FeatureTrackerConfigs.LK_SHI_TOMASI
+		tracker_config['num_features'] = num_features
+		
+		feature_tracker = feature_tracker_factory(**tracker_config)
+
+		# create visual odometry object 
+		self.vo = VisualOdometry(cam, None, feature_tracker)
+		print("Computing Trajectory")
+		for img_id in tqdm(range(0, self.__len__(), 1)):
+			data_frame = self.__getitem__(img_id)
+
+			phone_data_frame, phone_img_frame = data_frame['phone_frame']
+			panda_data_frame = data_frame['panda_frame']
+
+			self.vo.track(phone_img_frame, img_id)
+			if img_id>2:
+				x, y, z = self.vo.traj3d_est[-1]
+			else:
+				x, y, z = 0.0, 0.0, 0.0
 
 
 	def __len__(self) -> int:
@@ -468,12 +532,12 @@ if __name__ == '__main__':
 	dbc_interp = DBCInterpreter("dbc/honda_city.dbc")
 	panda_path = os.path.join("dataset/panda_logs/PANDA_2022-07-21_11:54:32.114482.csv")
 	panda_iter = PandaDatasetIterator(panda_path, dbc_interp=dbc_interp)
-	# phone_iter = AndroidDatasetIterator('dataset/android/1658384924059')
-	# merged_iter = MergedDatasetIterator(panda_iter=panda_iter, phone_iter=phone_iter)
+	phone_iter = AndroidDatasetIterator('dataset/android/1658384924059')
+	merged_iter = MergedDatasetIterator(panda_iter=panda_iter, phone_iter=phone_iter)
 
-	print(panda_iter)
+	# print(panda_iter)
 	# print(phone_iter)
-	# print(merged_iter)
+	print(merged_iter)
 
 	# for frame in merged_iter:
 	# 	print(frame)
