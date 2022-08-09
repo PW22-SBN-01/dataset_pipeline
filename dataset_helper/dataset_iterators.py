@@ -84,7 +84,7 @@ class PandaDatasetIterator:
 		self.line_no = 0
 		return self
 
-	def __next__(self) -> None:
+	def __next__(self):
 		data = self.__getitem__(self.line_no)
 		self.line_no += 1
 		return data
@@ -268,7 +268,7 @@ class AndroidDatasetIterator:
 		self.line_no = 0
 		return self
 
-	def __next__(self) -> None:
+	def __next__(self):
 		data = self.__getitem__(self.line_no)
 		self.line_no += 1
 		return data
@@ -309,11 +309,17 @@ class MergedDatasetIterator:
 		panda_iter: PandaDatasetIterator, 
 		settings_doc="calibration/pocoX3/calib.yaml", 
 		compute_trajectory=False, 
-		invalidate_cache=False
+		invalidate_cache=False,
+		start_index=None,
+		stop_index=None,
+		step_indices=None
 	) -> None:
 		assert type(phone_iter)==AndroidDatasetIterator
 		assert type(panda_iter)==PandaDatasetIterator
+		# assert (start_index==None and stop_index==None and step_indices==None) or (start_index!=None and stop_index!=None and step_indices!=None), "All start, end and skip indices must be provided or none"
 		# TODO: Generate ID for this pair of phone_iter and panda_iter
+
+		self.compute_trajectory = compute_trajectory
 		self.phone_iter = phone_iter
 		self.panda_iter = panda_iter
 		self.group = [
@@ -321,6 +327,7 @@ class MergedDatasetIterator:
 			(self.panda_iter.start_time_csv, self.panda_iter.end_time_csv)
 		]
 		self.start_time, self.end_time = helper.intersection_of_group(self.group)
+		
 		self.duration = self.end_time - self.start_time
 		self.IOU = helper.IOU_of_group(self.group)
 		
@@ -333,7 +340,24 @@ class MergedDatasetIterator:
 		self.panda_frame_count = len(self.panda_dat)
 		self.panda_fps = self.panda_frame_count / self.duration
 
-		self.frame_count = max(self.phone_frame_count, self.panda_frame_count)
+		self.frame_count_original = max(self.phone_frame_count, self.panda_frame_count)
+		
+		if start_index==None:
+			start_index = 0
+		if stop_index==None:
+			stop_index = self.frame_count_original
+		if step_indices==None:
+			step_indices = 1
+		assert type(start_index)==int
+		assert type(stop_index)==int
+		assert type(step_indices)==int
+		assert start_index>=0
+		assert stop_index<=self.frame_count_original
+		self.start_index = start_index
+		self.stop_index = stop_index
+		self.step_indices = step_indices
+
+		self.frame_count = self.frame_count_original
 		self.fps = max(self.phone_fps, self.panda_fps)
 
 		self.settings_doc = settings_doc
@@ -351,7 +375,7 @@ class MergedDatasetIterator:
 			k3 = self.cam_settings['Camera.k3']
 		self.DistCoef = np.array([k1, k2, p1, p2, k3])
 
-		if compute_trajectory:
+		if self.compute_trajectory:
 			self.folder_path = os.path.dirname(self.phone_iter.csv_path)
 			cached_csv_folder = os.path.join(self.folder_path, TRAJECTORY_CACHE_DIR)
 			os.makedirs(cached_csv_folder, exist_ok=True)
@@ -364,6 +388,29 @@ class MergedDatasetIterator:
 			self.trajectory = pd.DataFrame({
 				'x':[], 'y':[], 'z': []
 			})
+		
+		if self.start_index!=0 or self.step_indices!=self.frame_count_original or self.step_indices!=1:
+			# Recompute 
+			self.start_time, self.end_time = (
+				self.start_time + self.start_index / self.fps,
+				self.start_time + self.stop_index / self.fps
+			)
+			self.duration = self.end_time - self.start_time
+
+			self.phone_dat = self.phone_iter.get_item_between_timestamp(self.start_time*1000.0, self.end_time*1000.0)
+			self.phone_dat = self.phone_dat[self.phone_dat.index % self.step_indices == 0]  
+			self.phone_frame_count = len(self.phone_dat)
+			self.phone_fps = self.phone_frame_count / self.duration
+
+			self.panda_dat = self.panda_iter.get_item_between_timestamp(self.start_time, self.end_time)
+			self.panda_dat = self.panda_dat[self.panda_dat.index % self.step_indices == 0]  
+			self.panda_frame_count = len(self.panda_dat)
+			self.panda_fps = self.panda_frame_count / self.duration
+
+			self.frame_count = max(self.phone_frame_count, self.panda_frame_count)
+			self.fps = max(self.phone_fps, self.panda_fps)
+		
+		
 	
 	def compute_slam(self):
 		sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), "extras/pyslam"))
@@ -400,7 +447,7 @@ class MergedDatasetIterator:
 		# create visual odometry object 
 		self.vo = VisualOdometry(cam, None, feature_tracker)
 		print("Computing Trajectory")
-		for img_id in tqdm(range(0, self.__len__(), 1)):
+		for img_id in tqdm(range(0, self.frame_count_original, 1)):
 			data_frame = self.__getitem__(img_id)
 
 			phone_data_frame, phone_img_frame = data_frame['phone_frame']
@@ -425,26 +472,46 @@ class MergedDatasetIterator:
 		return self.frame_count
 
 	def __getitem__(self, key):
-		if key > len(self):
-			raise IndexError("Out of bounds; key=", key)
-		
-		frame_ts = self.start_time + key / self.fps # frame timestamp in seconds
-		panda_frame = self.panda_iter.get_item_by_timestamp(frame_ts)
-		phone_frame = self.phone_iter.get_item_by_timestamp(frame_ts*1000.0)
-		#phone_frame = self.phone_iter[key]
-		
-		return {
-			'panda_frame': panda_frame,
-			'phone_frame': phone_frame,
-		}
+		if type(key)==int:
+			key_original = key
+			if key > len(self):
+				raise IndexError("Out of bounds; key=", key)
+			
+			# key = key * self.step_indices
+			
+			frame_ts = self.start_time + key / self.fps # frame timestamp in seconds
+			panda_frame = self.panda_iter.get_item_by_timestamp(frame_ts)
+			phone_frame = self.phone_iter.get_item_by_timestamp(frame_ts*1000.0)
+			#phone_frame = self.phone_iter[key]
+			
+			return {
+				'panda_frame': panda_frame,
+				'phone_frame': phone_frame,
+			}
+		elif type(key)==slice:
+			return MergedDatasetIterator(
+				phone_iter=self.phone_iter,
+				panda_iter=self.panda_iter,
+				settings_doc=self.settings_doc,
+				compute_trajectory=self.compute_trajectory,
+				invalidate_cache=False,
+				start_index=key.start,
+				stop_index=key.stop,
+				step_indices=key.step
+			)
+		else:
+			raise IndexError("Unknown key type; key=" + str(key) + ", type(key)=" + str(type(key)))
 
 	def __iter__(self):
 		self.line_no = 0
 		return self
 
-	def __next__(self) -> None:
+	def __next__(self):
+		if self.line_no > self.__len__():
+			raise StopIteration
 		data = self.__getitem__(self.line_no)
 		self.line_no += 1
+		# self.line_no += self.step_indices
 		return data
 
 	def __str__(self) -> str:
@@ -461,7 +528,7 @@ class MergedDatasetIterator:
 		res += "self.IOU:\t\t" + \
 			 str(round(self.IOU*100, 2)) + " %" + '\n'
 		res += "self.frame_count:\t" + str(self.frame_count) + '\n'
-		res += "self.fps:\t" + str(self.fps) + '\n'
+		res += "self.fps:\t\t" + str(self.fps) + '\n'
 		res += "----------------------------------------------------"
 		return res
 
@@ -572,7 +639,18 @@ if __name__ == '__main__':
 	# print(panda_iter)
 	# print(phone_iter)
 	print(merged_iter)
+	small = merged_iter[int(merged_iter.fps*30):int(merged_iter.fps*35):int(merged_iter.fps)]
+	# small = merged_iter
+	print(small)
 
+	for data_frame in small:
+		phone_data_frame, phone_img_frame = data_frame['phone_frame']
+		panda_data_frame = data_frame['panda_frame']
+		frame = cv2.resize(phone_img_frame, (0,0), fx=0.25, fy=0.25)
+		cv2.imshow('frame', frame)
+		key = cv2.waitKey(1000)
+		if key==ord('q'):
+			break
 	# for frame in merged_iter:
 	# 	print(frame)
 
