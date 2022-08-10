@@ -1,6 +1,10 @@
 
 
 def intersection(start1, end1, start2, end2):
+	if start2<start1:
+		start1, end1, start2, end2 = start2, end2, start1, end1
+	if end1 < start2:
+		return (None, None)
 	return (max([start1, start2]), min([end1, end2]))
 
 def union(start1, end1, start2, end2):

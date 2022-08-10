@@ -410,8 +410,7 @@ class MergedDatasetIterator:
 			self.frame_count = max(self.phone_frame_count, self.panda_frame_count)
 			self.fps = max(self.phone_fps, self.panda_fps)
 		
-		
-	
+
 	def compute_slam(self):
 		sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), "extras/pyslam"))
 		# from extras.pyslam.visual_odometry import VisualOdometry
@@ -511,14 +510,12 @@ class MergedDatasetIterator:
 			raise StopIteration
 		data = self.__getitem__(self.line_no)
 		self.line_no += 1
-		# self.line_no += self.step_indices
 		return data
 
 	def __str__(self) -> str:
 		res = "----------------------------------------------------" + '\n'
 		res += "MergedDatasetIterator" + '\n'
 		res += "----------------------------------------------------" + '\n'
-		# res += "self.frame_count:\t" + str(self.len()) + '\n'
 		res += "self.start_time:\t" + \
 			 str(datetime.fromtimestamp(self.start_time)) + '\n'
 		res += "self.end_time:\t\t" + \
@@ -538,11 +535,17 @@ class MergedDatasetIterator:
 		Raise exception if delta between timestamp and frame is greaterthan fault_delay
 		"""
 		closest_frames = self.get_item_between_timestamp(timestamp-fault_delay, timestamp+fault_delay, fault_delay=float('inf'))
-		closest_frames = closest_frames.reset_index(drop=True)
-		closest_frame = closest_frames.iloc[(closest_frames['timestamp']-timestamp).abs().argsort()[0]]
-		closest_ts = closest_frame['timestamp']
-		if abs(timestamp - closest_ts) > fault_delay:
-			raise Exception("No such timestamp, fault delay exceeded: abs(timestamp - closest_ts)=" + str(abs(timestamp - closest_ts)))
+		closest_frames['panda_frame'] = closest_frames['panda_frame'].reset_index(drop=True)
+		closest_frames['phone_frame'] = closest_frames['phone_frame'].reset_index(drop=True)
+		closest_frame = {
+			'panda_frame': closest_frames['panda_frame'].iloc[(closest_frames['panda_frame']['timestamp']-timestamp).abs().argsort()[0]],
+			'phone_frame': closest_frames['phone_frame'].iloc[(closest_frames['phone_frame']['timestamp']-timestamp).abs().argsort()[0]]
+		}
+		panda_closest_ts = closest_frame['panda_frame']['timestamp']
+		phone_closest_ts = closest_frame['phone_frame']['timestamp']
+
+		if abs(panda_closest_ts - phone_closest_ts) > fault_delay:
+			raise Exception("Phone Panda delta too large" + str(abs(panda_closest_ts - phone_closest_ts)))
 		return closest_frame
 
 	def get_item_between_timestamp(self, start_ts, end_ts, fault_delay=0.5):
@@ -551,16 +554,14 @@ class MergedDatasetIterator:
 		Raise exception if delta between start_ts and minimum_ts is greater than fault_delay
 		Raise exception if delta between end_ts and maximum_ts is greater than fault_delay
 		"""
-		# ts_dat = self.csv_dat[self.csv_dat['timestamp'].between(start_ts, end_ts)]
-		# minimum_ts = min(ts_dat['timestamp'])
-		# if abs(minimum_ts - start_ts) > fault_delay:
-		# 	raise Exception("start_ts is out of bounds: abs(minimum_ts - start_ts) > fault_delay")
-		# maximum_ts = max(ts_dat['Timestamp'])
-		
-		# if abs(maximum_ts - end_ts) > fault_delay:
-		# 	raise Exception("end_ts is out of bounds: abs(maximum_ts - end_ts) > fault_delay")
-		# TODO
-		pass
+		start_frame_ts = self.start_time + start_ts / self.fps # frame timestamp in seconds
+		end_frame_ts = self.start_time + end_frame_ts / self.fps # frame timestamp in seconds
+		panda_frame = self.panda_iter.get_item_between_timestamp(start_frame_ts, end_frame_ts)
+		phone_frame = self.phone_iter.get_item_by_timestamp(start_frame_ts*1000.0, end_frame_ts*1000)
+		return {
+			'panda_frame': panda_frame,
+			'phone_frame': phone_frame,
+		}
 
 	def __repr__(self) -> str:
 		return str(self)
@@ -580,26 +581,21 @@ class DBCInterpreter:
 		print("dbc_path:", dbc_path)
 		self.dbc_path = dbc_path
 		self.db = cantools.database.load_file(self.dbc_path)
-		# TODO: Interpret the DBC file into a dict
-		# TODO: the datatype will have all details like name, bytes, endian-ness, etc.
 		self.id_to_datatype = {}
 
 	def interpret_can_frame(self, data):
-		# TODO: Given a CAN DataFrame from PandaCSVInterpreter, produce output in dict
+		# Given a CAN DataFrame from PandaCSVInterpreter, produce output in dict
 		# For example, result = {'throttle':30, 'rpm': 1200, ....}
 		result = {}
 		for key in data.keys():
 			if key!='timestamp':
 				try:
-					# print(key, data[key], type(data[key]))
 					if type(data[key])==str:
 						tuple_dat = eval(data[key])
 						hex_frame = binascii.unhexlify(eval(tuple_dat[1]))
 						new_dict = self.db.decode_message(int(key), hex_frame)
 						for k in new_dict:
 							result[k] = new_dict[k]
-						# print(type(hex_frame), hex_frame)
-						# print()
 				except KeyError:
 					pass
 				except ValueError:

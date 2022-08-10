@@ -84,4 +84,6 @@ python -m pycodestyle dataset_helper.py
 
 ## Unit Testing
 
-TODO
+```bash
+python -m pytest --import-mode=append tests/
+```
