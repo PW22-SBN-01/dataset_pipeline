@@ -1,5 +1,10 @@
 # Dataset Helpers
 
+
+![pylint workflow](https://github.com/PW22-SBN-01/dataset_pipeline/actions/workflows/pylint.yml/badge.svg)
+![pypi workflow](https://github.com/PW22-SBN-01/dataset_pipeline/actions/workflows/pypi.yml/badge.svg)
+![pytest workflow](https://github.com/PW22-SBN-01/dataset_pipeline/actions/workflows/pytest.yml/badge.svg)
+
 [Raw Dataset Drive Link](https://drive.google.com/drive/folders/1ouZk8stDobJtpDvYKBPKg0bWNR6bIX-U?usp=sharing)
 
 TODO:
