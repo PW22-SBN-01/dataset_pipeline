@@ -374,15 +374,21 @@ class MergedDatasetIterator:
 		if 'Camera.k3' in self.cam_settings:
 			k3 = self.cam_settings['Camera.k3']
 		self.DistCoef = np.array([k1, k2, p1, p2, k3])
+		self.camera_matrix = np.array([
+			[self.cam_settings['Camera.fx']	, 0.0							, self.cam_settings['Camera.cx']],
+			[0.0							, self.cam_settings['Camera.fy'], self.cam_settings['Camera.cy']],
+			[0.0							, 0.0							, 1.0]
+		])
 
+		self.folder_path = os.path.dirname(self.phone_iter.csv_path)
+		cached_csv_folder = os.path.join(self.folder_path, TRAJECTORY_CACHE_DIR)
+		os.makedirs(cached_csv_folder, exist_ok=True)
+		self.cached_csv_path = os.path.join(cached_csv_folder, os.path.basename(self.phone_iter.csv_path))
 		if self.compute_trajectory:
-			self.folder_path = os.path.dirname(self.phone_iter.csv_path)
-			cached_csv_folder = os.path.join(self.folder_path, TRAJECTORY_CACHE_DIR)
-			os.makedirs(cached_csv_folder, exist_ok=True)
-			self.cached_csv_path = os.path.join(cached_csv_folder, os.path.basename(self.phone_iter.csv_path))
 			if not os.path.exists(self.cached_csv_path) or invalidate_cache:
 				self.compute_slam()
 			else:
+				print("Loading trajectory from cache: ", self.cached_csv_path)
 				self.trajectory = pd.read_csv(self.cached_csv_path)
 		else: 
 			self.trajectory = pd.DataFrame({
@@ -411,11 +417,12 @@ class MergedDatasetIterator:
 			self.fps = max(self.phone_fps, self.panda_fps)
 		
 
-	def compute_slam(self):
+	def compute_slam(self, scale_factor=0.25, enable_plot=True, plot_3D_x=250, plot_3D_y=500,):
 		sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), "extras/pyslam"))
 		# from extras.pyslam.visual_odometry import VisualOdometry
 		from visual_odometry import VisualOdometry
-		from camera  import PinholeCamera
+		from visual_imu_gps_odometry import Visual_IMU_GPS_Odometry
+		from camera import PinholeCamera
 		from feature_tracker_configs import FeatureTrackerConfigs
 		from feature_tracker import feature_tracker_factory
 
@@ -424,12 +431,12 @@ class MergedDatasetIterator:
 		}
 
 		cam = PinholeCamera(
-			self.cam_settings['Camera.width'], 
-			self.cam_settings['Camera.height'],
-			self.cam_settings['Camera.fx'],
-			self.cam_settings['Camera.fy'],
-			self.cam_settings['Camera.cx'],
-			self.cam_settings['Camera.cy'],
+			self.cam_settings['Camera.width'] * scale_factor, 
+			self.cam_settings['Camera.height'] * scale_factor,
+			self.cam_settings['Camera.fx'] * scale_factor,
+			self.cam_settings['Camera.fy'] * scale_factor,
+			self.cam_settings['Camera.cx'] * scale_factor,
+			self.cam_settings['Camera.cy'] * scale_factor,
 			self.DistCoef,
 			self.cam_settings['Camera.fps']
 		)
@@ -442,26 +449,70 @@ class MergedDatasetIterator:
 		tracker_config['num_features'] = num_features
 		
 		feature_tracker = feature_tracker_factory(**tracker_config)
-
+		print(feature_tracker)
 		# create visual odometry object 
-		self.vo = VisualOdometry(cam, None, feature_tracker)
+		self.vo = Visual_IMU_GPS_Odometry(cam, None, feature_tracker)
 		print("Computing Trajectory")
-		for img_id in tqdm(range(0, self.frame_count_original, 1)):
+		plot_3D = np.zeros((plot_3D_x, plot_3D_y, 3))
+		for img_id in tqdm(range(0, self.frame_count, 1)):
 			data_frame = self.__getitem__(img_id)
 
 			phone_data_frame, phone_img_frame = data_frame['phone_frame']
 			panda_data_frame = data_frame['panda_frame']
 
-			self.vo.track(phone_img_frame, img_id)
+			phone_img_frame_scaled = cv2.resize(phone_img_frame, (0,0), fx=scale_factor, fy=scale_factor)
+
+			self.vo.track(phone_img_frame_scaled, img_id,
+				accel_data=np.array([
+					phone_data_frame['linear_acc_x'],
+					phone_data_frame['linear_acc_y'],
+					phone_data_frame['linear_acc_z']
+				]).reshape((3,1)),
+				gyro_data=np.array([
+					phone_data_frame['RotationV X'],
+					phone_data_frame['RotationV Y'],
+					phone_data_frame['RotationV Z'],
+					phone_data_frame['RotationV W'],
+					phone_data_frame['RotationV Acc']
+				]),
+				gps_data=np.array([
+					phone_data_frame['Longitude'],
+					phone_data_frame['Latitude'],
+					phone_data_frame['speed'],
+					phone_data_frame['heading']
+				]),
+				timestamp=phone_data_frame['Timestamp'],
+			)
 			if img_id>2:
 				x, y, z = self.vo.traj3d_est[-1]
 			else:
+				# x, y, z = [0.0], [0.0], [0.0]
 				x, y, z = 0.0, 0.0, 0.0
+
+			if type(x)!=float:
+				x = float(x[0])
+			if type(y)!=float:
+				y = float(y[0])
+			if type(z)!=float:
+				z = float(z[0])
 
 			self.trajectory['x'] += [x]
 			self.trajectory['y'] += [y]
 			self.trajectory['z'] += [z]
-			break
+
+
+			if enable_plot:
+				p3x = int(x / 10 + plot_3D_x//2)
+				p3y = int(z / 10 + plot_3D_y//2)
+				if p3x in range(0, plot_3D_x) and p3y in range(0, plot_3D_y):
+					plot_3D = cv2.circle(plot_3D, (p3y, p3x), 2, (0,255,0), 1)
+
+			if enable_plot:
+				cv2.imshow('plot_3D', plot_3D)
+				cv2.imshow('Camera', self.vo.draw_img)
+				key = cv2.waitKey(1)
+				if key == ord('q'):
+					break
 
 		self.trajectory = pd.DataFrame(self.trajectory)
 		self.trajectory.to_csv(self.cached_csv_path, index=False)
@@ -635,18 +686,22 @@ if __name__ == '__main__':
 	# print(panda_iter)
 	# print(phone_iter)
 	print(merged_iter)
-	small = merged_iter[int(merged_iter.fps*30):int(merged_iter.fps*35):int(merged_iter.fps)]
-	# small = merged_iter
-	print(small)
+	small = merged_iter[
+		int(merged_iter.fps*30):
+		int(merged_iter.fps*60)
+	]
+	small.compute_slam()
+	# # small = merged_iter
+	# print(small)
 
-	for data_frame in small:
-		phone_data_frame, phone_img_frame = data_frame['phone_frame']
-		panda_data_frame = data_frame['panda_frame']
-		frame = cv2.resize(phone_img_frame, (0,0), fx=0.25, fy=0.25)
-		cv2.imshow('frame', frame)
-		key = cv2.waitKey(1000)
-		if key==ord('q'):
-			break
+	# for data_frame in small:
+	# 	phone_data_frame, phone_img_frame = data_frame['phone_frame']
+	# 	panda_data_frame = data_frame['panda_frame']
+	# 	frame = cv2.resize(phone_img_frame, (0,0), fx=0.25, fy=0.25)
+	# 	cv2.imshow('frame', frame)
+	# 	key = cv2.waitKey(1000)
+	# 	if key==ord('q'):
+	# 		break
 	# for frame in merged_iter:
 	# 	print(frame)
 

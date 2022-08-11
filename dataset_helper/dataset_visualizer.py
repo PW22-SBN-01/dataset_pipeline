@@ -145,7 +145,6 @@ class PandaDatasetVisualizer:
 	
 	def generate_frame_visuals(self, data_frame):
 		dat = self.panda_iter.dbc_interp.interpret_can_frame(data_frame)
-		print(dat)
 		if 'CAR_GAS' in dat:
 			self.throttle_bar = np.zeros((self.scale_x,self.scale_y,3), dtype=np.uint8)
 			self.throttle_bar[
@@ -186,7 +185,6 @@ class PandaDatasetVisualizer:
 			if max_del>0:
 				color_fl = self.cmap(deltas[0]/max_del)
 				color_fl = list(map(lambda k: int(k*255), color_fl))
-				print(color_fl)
 				self.full_car[
 					10:90,
 					10:90,
@@ -219,8 +217,6 @@ class PandaDatasetVisualizer:
 			#for data_frame in self.panda_iter:
 			for index in range(int(self.panda_iter.fps*120), len(self.panda_iter), 1):
 				data_frame = self.panda_iter[index]
-				# print(data_frame)
-				# print(self.panda_iter.dbc_interp)
 				
 				self.generate_frame_visuals(data_frame)
 					
@@ -266,8 +262,9 @@ class MergedDatasetVisualizer:
 	def playback(self):
 		try:
 			# start playback 
-			#for data_frame in self.merged_iter:
-			for index in range(int(self.merged_iter.fps*120), len(self.merged_iter), int(self.merged_iter.fps*0.5)):
+			# for data_frame in self.merged_iter:
+			# for index in range(int(self.merged_iter.fps*120), len(self.merged_iter), int(self.merged_iter.fps*0.5)):
+			for index in range(0, len(self.merged_iter)):
 				data_frame = self.merged_iter[index]
 
 				phone_data_frame, phone_img_frame = data_frame['phone_frame']
@@ -298,7 +295,23 @@ class MergedDatasetVisualizer:
 					start_point_y + self.panda_vis.rpm_bar.shape[1] + self.panda_vis.throttle_bar.shape[1]: start_point_y + self.panda_vis.rpm_bar.shape[1] + self.panda_vis.throttle_bar.shape[1] + self.panda_vis.brake_pressed.shape[1] 
 				] = cv2.cvtColor(self.panda_vis.brake_pressed, cv2.COLOR_RGB2RGBA)
 
-				cv2.imshow("panda_frame", self.panda_vis.throttle_bar)
+				# for row, point in self.merged_iter.trajectory[index:index+int(self.merged_iter.fps)].iterrows():
+				for row, point in self.merged_iter.trajectory[index:index+100].iterrows():
+					p3d = np.array([
+						point['x'],
+						point['y'],
+						point['z'],
+						1.0
+					]).reshape((4,1))
+					homo_cam_mat = np.hstack((self.merged_iter.camera_matrix, np.zeros((3,1))))
+					p2d = (self.scale_factor*homo_cam_mat) @ p3d
+					# p2d = (self.scale_factor*self.merged_iter.camera_matrix) @ p3d
+					if p2d[2][0]!=0.0:
+						px, py = int(p2d[0][0] / p2d[2][0]), int(p2d[1][0] / p2d[2][0])
+						print(px, py)
+						self.final_frame = cv2.circle(self.final_frame, (px, py), 2, (0,255,0), 1)
+					#self.final_frame
+
 				self.final_frame = cv2.addWeighted(self.panda_frame,1.0,self.final_frame,1.0,0)
 
 				if self.scale_factor!=1.0:
@@ -325,7 +338,12 @@ if __name__=="__main__":
 	panda_path = os.path.join("dataset/panda_logs/PANDA_2022-07-21_11:54:32.114482.csv")
 	panda_iter = PandaDatasetIterator(panda_path, dbc_interp=dbc_interp)
 	phone_iter = AndroidDatasetIterator('dataset/android/1658384924059')
-	merged_iter = MergedDatasetIterator(panda_iter=panda_iter, phone_iter=phone_iter)
+	merged_iter = MergedDatasetIterator(
+		panda_iter=panda_iter, 
+		phone_iter=phone_iter,
+		compute_trajectory=True,
+		invalidate_cache=False
+	)
 
 	# merged_vis = MergedDatasetVisualizer(merged_iter, 0.25)
 	# merged_vis.playback()
@@ -333,6 +351,12 @@ if __name__=="__main__":
 	# phone_vis.playback()
 	# panda_vis = PandaDatasetVisualizer(panda_iter=panda_iter)
 	# panda_vis.playback()
+
+	merged_iter = merged_iter[
+		int(merged_iter.fps*30):
+		int(merged_iter.fps*32)
+	]
+	# merged_iter.compute_slam()
 
 	merged_vis = MergedDatasetVisualizer(merged_iter=merged_iter, scale_factor=0.5)
 	merged_vis.playback()
