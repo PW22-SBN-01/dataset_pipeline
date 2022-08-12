@@ -270,6 +270,12 @@ class MergedDatasetVisualizer:
 				phone_data_frame, phone_img_frame = data_frame['phone_frame']
 				panda_data_frame = data_frame['panda_frame']
 
+				h,  w = phone_img_frame.shape[:2]
+				newcameramtx, roi = cv2.getOptimalNewCameraMatrix(self.merged_iter.camera_matrix, self.merged_iter.DistCoef, (w,h), 1, (w,h))
+				phone_img_frame = cv2.undistort(phone_img_frame, self.merged_iter.camera_matrix, self.merged_iter.DistCoef, None, newcameramtx)
+				x, y, w, h = roi
+				phone_img_frame = phone_img_frame[y:y+h, x:x+w]
+
 				self.phone_vis.generate_frame_visuals(phone_data_frame, phone_img_frame)
 				self.panda_vis.generate_frame_visuals(panda_data_frame)
 				
@@ -294,23 +300,37 @@ class MergedDatasetVisualizer:
 					start_point_x : start_point_x + self.panda_vis.brake_pressed.shape[0],
 					start_point_y + self.panda_vis.rpm_bar.shape[1] + self.panda_vis.throttle_bar.shape[1]: start_point_y + self.panda_vis.rpm_bar.shape[1] + self.panda_vis.throttle_bar.shape[1] + self.panda_vis.brake_pressed.shape[1] 
 				] = cv2.cvtColor(self.panda_vis.brake_pressed, cv2.COLOR_RGB2RGBA)
-
+				# import pandas as pd
+				# self.merged_iter.trajectory = pd.DataFrame(self.merged_iter.trajectory)
+				point_cur = self.merged_iter.trajectory.iloc[index]
 				# for row, point in self.merged_iter.trajectory[index:index+int(self.merged_iter.fps)].iterrows():
-				for row, point in self.merged_iter.trajectory[index:index+100].iterrows():
+				for row, point in self.merged_iter.trajectory[index+5:index+500].iterrows():
+					# rot = np.eye(4,4)
+					# rot[0:3,0:3] = point_cur['rot']
+					# p3d = np.array([
+					# 	point['x'] - point_cur['x'],
+					# 	point['y'] - point_cur['y'],
+					# 	point['z'] - point_cur['z'],
+					# 	1.0
+					# ]).reshape((4,1))
+					# p3d = rot @ p3d
+					
+					rot = point_cur['rot']
+					p4d = np.ones((4,1))
 					p3d = np.array([
-						point['x'],
-						point['y'],
-						point['z'],
-						1.0
-					]).reshape((4,1))
-					homo_cam_mat = np.hstack((self.merged_iter.camera_matrix, np.zeros((3,1))))
-					p2d = (self.scale_factor*homo_cam_mat) @ p3d
+						point['x'] - point_cur['x'],
+						point['y'] - point_cur['y'],
+						point['z'] - point_cur['z'],
+					]).reshape((3,1))
+					p4d[:3,:] = np.linalg.inv(rot) @ p3d
+					
+
+					homo_cam_mat = np.hstack((newcameramtx, np.zeros((3,1))))
+					p2d = (self.scale_factor*homo_cam_mat) @ p4d
 					# p2d = (self.scale_factor*self.merged_iter.camera_matrix) @ p3d
 					if p2d[2][0]!=0.0:
 						px, py = int(p2d[0][0] / p2d[2][0]), int(p2d[1][0] / p2d[2][0])
-						print(px, py)
-						self.final_frame = cv2.circle(self.final_frame, (px, py), 2, (0,255,0), 1)
-					#self.final_frame
+						self.final_frame = cv2.circle(self.final_frame, (px, py), 5, (0,255,0), -1)
 
 				self.final_frame = cv2.addWeighted(self.panda_frame,1.0,self.final_frame,1.0,0)
 
@@ -354,7 +374,7 @@ if __name__=="__main__":
 
 	merged_iter = merged_iter[
 		int(merged_iter.fps*30):
-		int(merged_iter.fps*32)
+		int(merged_iter.fps*35)
 	]
 	# merged_iter.compute_slam()
 

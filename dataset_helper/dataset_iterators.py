@@ -12,6 +12,7 @@ import math
 import numpy as np
 import sys
 import pathlib
+import pickle
 
 import cv2
 import pandas as pd
@@ -381,18 +382,21 @@ class MergedDatasetIterator:
 		])
 
 		self.folder_path = os.path.dirname(self.phone_iter.csv_path)
-		cached_csv_folder = os.path.join(self.folder_path, TRAJECTORY_CACHE_DIR)
-		os.makedirs(cached_csv_folder, exist_ok=True)
-		self.cached_csv_path = os.path.join(cached_csv_folder, os.path.basename(self.phone_iter.csv_path))
+		cached_trajectory_folder = os.path.join(self.folder_path, TRAJECTORY_CACHE_DIR)
+		os.makedirs(cached_trajectory_folder, exist_ok=True)
+		self.cached_trajectory_path = os.path.join(cached_trajectory_folder, os.path.basename(self.phone_iter.csv_path) + ".pkl")
 		if self.compute_trajectory:
-			if not os.path.exists(self.cached_csv_path) or invalidate_cache:
+			if not os.path.exists(self.cached_trajectory_path) or invalidate_cache:
 				self.compute_slam()
 			else:
-				print("Loading trajectory from cache: ", self.cached_csv_path)
-				self.trajectory = pd.read_csv(self.cached_csv_path)
+				print("Loading trajectory from cache: ", self.cached_trajectory_path)
+				with open(self.cached_trajectory_path, 'rb') as handle:
+					self.trajectory = pickle.load(handle)
+
+				# self.trajectory = pd.read_csv(self.cached_trajectory_path)
 		else: 
 			self.trajectory = pd.DataFrame({
-				'x':[], 'y':[], 'z': []
+				'x':[], 'y':[], 'z': [], 'rot': []
 			})
 		
 		if self.start_index!=0 or self.step_indices!=self.frame_count_original or self.step_indices!=1:
@@ -427,7 +431,7 @@ class MergedDatasetIterator:
 		from feature_tracker import feature_tracker_factory
 
 		self.trajectory = {
-			'x':[], 'y':[], 'z': []
+			'x':[], 'y':[], 'z': [], 'rot': []
 		}
 
 		cam = PinholeCamera(
@@ -485,9 +489,11 @@ class MergedDatasetIterator:
 			)
 			if img_id>2:
 				x, y, z = self.vo.traj3d_est[-1]
+				rot = np.array(self.vo.cur_R, copy=True)
 			else:
 				# x, y, z = [0.0], [0.0], [0.0]
 				x, y, z = 0.0, 0.0, 0.0
+				rot = np.eye(3,3)
 
 			if type(x)!=float:
 				x = float(x[0])
@@ -499,7 +505,7 @@ class MergedDatasetIterator:
 			self.trajectory['x'] += [x]
 			self.trajectory['y'] += [y]
 			self.trajectory['z'] += [z]
-
+			self.trajectory['rot'] += [rot]
 
 			if enable_plot:
 				p3x = int(x / 10 + plot_3D_x//2)
@@ -515,7 +521,9 @@ class MergedDatasetIterator:
 					break
 
 		self.trajectory = pd.DataFrame(self.trajectory)
-		self.trajectory.to_csv(self.cached_csv_path, index=False)
+		# self.trajectory.to_csv(self.cached_trajectory_p]ath, index=False)
+		with open(self.cached_trajectory_path, 'wb') as handle:
+			pickle.dump(self.trajectory, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 	def __len__(self) -> int:
