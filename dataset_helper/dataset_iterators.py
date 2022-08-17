@@ -421,7 +421,7 @@ class MergedDatasetIterator:
 			self.fps = max(self.phone_fps, self.panda_fps)
 		
 
-	def compute_slam(self, scale_factor=0.25, enable_plot=True, plot_3D_x=250, plot_3D_y=500,):
+	def compute_slam(self, scale_factor=0.25, enable_plot=False, plot_3D_x=250, plot_3D_y=500,):
 		sys.path.append(os.path.join(pathlib.Path(__file__).parent.resolve(), "extras/pyslam"))
 		# from extras.pyslam.visual_odometry import VisualOdometry
 		from visual_odometry import VisualOdometry

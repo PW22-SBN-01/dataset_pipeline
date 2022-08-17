@@ -1,4 +1,5 @@
-
+import math
+import numpy as np
 
 def intersection(start1, end1, start2, end2):
 	if start2<start1:
@@ -29,3 +30,14 @@ def IOU_of_group(group):
 	if end_union == start_union:
 		return float('inf')
 	return float(end_intersect - start_intersect) / float(end_union - start_union)
+
+def translate_rotate(p, x, y, theta):
+	p_dtype = p.dtype
+	p = np.array([
+		p[0]*math.cos(theta) - p[1]*math.sin(theta),
+		p[0]*math.sin(theta) + p[1]*math.cos(theta)
+	], dtype=p_dtype)
+	# p = p[0]-x, p[1]-y
+	p = p - np.array([x,y], dtype=p_dtype)
+	
+	return p
