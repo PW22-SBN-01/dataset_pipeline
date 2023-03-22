@@ -19,9 +19,173 @@ import pandas as pd
 from tqdm import tqdm
 import cantools
 import yaml
+import open3d as o3d
+from scipy.spatial.transform import Rotation
 
 from .dataset_constants import *
 from . import helper
+
+class BengaluruDepthDatasetIterator:
+	
+	def __init__(self, dataset_path="~/Datasets/Depth_Dataset_Bengaluru/1653972957447", settings_doc="calibration/pocoX3/calib.yaml") -> None:
+		self.dataset_path = os.path.expanduser(dataset_path)
+		self.dataset_id = self.dataset_path.split("/")[-1]
+		self.rgb_img_folder = os.path.join(self.dataset_path, "rgb_img")
+		self.depth_img_folder = os.path.join(self.dataset_path, "depth_img")
+		self.csv_path = os.path.join(self.dataset_path, self.dataset_id + ".csv")
+		
+		os.path.isdir(self.dataset_path)
+		os.path.isdir(self.rgb_img_folder)
+		os.path.isdir(self.depth_img_folder)
+		os.path.isfile(self.csv_path)
+	
+		self.settings_doc = settings_doc
+		with open(self.settings_doc, 'r') as stream:
+			try:
+				self.cam_settings = yaml.load(stream, Loader=yaml.FullLoader)
+			except yaml.YAMLError as exc:
+				print(exc)
+		k1 = self.cam_settings['Camera.k1']
+		k2 = self.cam_settings['Camera.k2']
+		p1 = self.cam_settings['Camera.p1']
+		p2 = self.cam_settings['Camera.p2']
+		k3 = 0
+		if 'Camera.k3' in self.cam_settings:
+			k3 = self.cam_settings['Camera.k3']
+		self.DistCoef = np.array([k1, k2, p1, p2, k3])
+		self.intrinsic_matrix = np.array([
+			[self.cam_settings['Camera.fx']	, 0.0							, self.cam_settings['Camera.cx']],
+			[0.0							, self.cam_settings['Camera.fy'], self.cam_settings['Camera.cy']],
+			[0.0							, 0.0							, 1.0]
+		])
+
+		self.width = self.cam_settings['Camera.width']
+		self.height = self.cam_settings['Camera.height']
+
+		self.csv_dat = pd.read_csv(self.csv_path)
+		
+	def __iter__(self):
+		self.line_no = 0
+		return self
+
+	def __next__(self):
+		data = self.__getitem__(self.line_no)
+		self.line_no += 1
+		return data
+
+	def __len__(self):
+		return len(self.csv_dat)
+
+	def __getitem__(self, key):
+		if key > len(self):
+			raise IndexError("Out of bounds; key=", key)
+		csv_frame = self.csv_dat.loc[key]
+		timestamp = str(int(csv_frame[1]))
+		# timestamp = str(csv_frame[1])
+		disparity_frame_path = os.path.join(self.depth_img_folder, timestamp + ".png")
+		rgb_frame_path = os.path.join(self.rgb_img_folder, timestamp + ".png")
+		
+		assert os.path.isfile(disparity_frame_path), "File missing " + disparity_frame_path
+		assert os.path.isfile(rgb_frame_path), "File missing " + rgb_frame_path
+
+		disparity_frame = cv2.imread(disparity_frame_path)
+		rgb_frame = cv2.imread(rgb_frame_path)
+
+		disparity_frame = cv2.cvtColor(disparity_frame, cv2.COLOR_BGR2GRAY)
+		
+		frame = {
+			'rgb_frame': rgb_frame,
+			'disparity_frame': disparity_frame,
+		}
+		
+		for key in csv_frame.keys():
+			frame[key] = csv_frame[key]
+		return frame
+
+class BengaluruOccupancyDatasetIterator(BengaluruDepthDatasetIterator):
+
+	def __init__(self, dataset_path="~/Datasets/Depth_Dataset_Bengaluru/1653972957447", settings_doc="calibration/pocoX3/calib.yaml") -> None:
+		super().__init__(dataset_path, settings_doc)
+
+		self.baseline = 1.0
+		self.fx = self.intrinsic_matrix[0,0]
+		self.fy = self.intrinsic_matrix[1,1]
+		self.cx = self.intrinsic_matrix[0,2]
+		self.cy = self.intrinsic_matrix[1,2]
+		self.focal_length = self.fx
+
+		self.intrinsics = o3d.camera.PinholeCameraIntrinsic(
+			width=self.width, height=self.height,
+			intrinsic_matrix=self.intrinsic_matrix
+		)
+
+		self.transformation = np.eye(4,4)
+		# self.transformation[:3,:3] = Rotation.from_euler("xyz", (-1.70000000e+02,  4.83655339e-15, -6.46097591e-14),degrees=True).as_matrix() # Great Top Down View
+		# self.transformation[:3,3] = [10000.0, 0.0, 0.0]
+		self.transformation[3,:3] = [0.0, 0.0, 10.0]
+
+	def __getitem__(self, key):
+		frame = super().__getitem__(key)
+		disparity = frame['disparity_frame'].astype(np.float32)
+		rgb_frame = cv2.cvtColor(frame['rgb_frame'], cv2.COLOR_BGR2RGB)
+
+		depth = self.baseline * self.focal_length * np.reciprocal(disparity)
+		depth[np.isinf(depth)] = self.baseline * self.focal_length
+		# depth = (depth - np.min(depth)) / (np.max(depth) - np.min(depth))
+		depth = depth.astype(np.float32)
+
+		print('depth.dtype', depth.dtype, np.max(depth), np.min(depth))
+		print('disparity.dtype', disparity.dtype, np.max(disparity), np.min(disparity))
+
+		# depth[depth>1250.6] = float('inf')
+		# depth[depth>50.0] = float('inf')
+		depth[depth>100.0] = float('inf')
+		# depth[
+		# 	:,
+		# 	0:depth.shape[1]//2
+		# ] = float('inf')
+		depth[
+			0:depth.shape[0]//2
+			:,
+		] = float('inf')
+
+		# U, V = np.ix_(np.arange(self.image_resolution[1]), np.arange(self.image_resolution[0])) # pylint: disable=unbalanced-tuple-unpacking
+		# Z = depth.copy()
+		
+		# X = (V - self.cx) * Z / self.fx
+		# Y = (U - self.cy) * Z / self.fy
+
+		# X = X.flatten()
+		# Y = Y.flatten()
+		# Z = Z.flatten()
+
+		# points = np.array([X,Y,Z]).T
+
+		# print(X.shape)
+		# print(points.shape)
+
+		rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
+			o3d.geometry.Image(rgb_frame), o3d.geometry.Image(depth),
+			depth_scale=10**2,
+			convert_rgb_to_intensity=False
+		)
+		pcd = o3d.geometry.PointCloud.create_from_rgbd_image(
+			rgbd, self.intrinsics
+		)
+
+		pcd.remove_non_finite_points()
+		pcd.transform(self.transformation)
+
+		points = np.asarray(pcd.points)
+
+		print('points.shape', points.shape)
+
+		frame['disparity'] = disparity
+		frame['depth'] = depth
+		frame['points'] = points
+		frame['pcd'] = pcd
+
+		return frame
 
 class PandaDatasetIterator:
 
@@ -685,6 +849,99 @@ class DBCInterpreter:
 
 
 if __name__ == '__main__':
+	depth_dataset = BengaluruOccupancyDatasetIterator()
+	scale = 0.3
+	plot2D = True
+	plot3D = True
+	 
+
+	def rotate_W(vis):
+		inc_rot = Rotation.from_euler("xyz", (10, 0.0, 0.0),degrees=True).as_matrix()
+		depth_dataset.transformation[:3,:3] = depth_dataset.transformation[:3,:3] @ inc_rot
+		print("ROT:", Rotation.from_matrix(depth_dataset.transformation[:3,:3]).as_rotvec(degrees=True))
+
+	def rotate_S(vis):
+		inc_rot = Rotation.from_euler("xyz", (-10, 0.0, 0.0),degrees=True).as_matrix()
+		depth_dataset.transformation[:3,:3] = depth_dataset.transformation[:3,:3] @ inc_rot
+		print("ROT:", Rotation.from_matrix(depth_dataset.transformation[:3,:3]).as_rotvec(degrees=True))
+	
+	def rotate_D(vis):
+		inc_rot = Rotation.from_euler("xyz", (0.0, 10, 0.0),degrees=True).as_matrix()
+		depth_dataset.transformation[:3,:3] = depth_dataset.transformation[:3,:3] @ inc_rot
+		print("ROT:", Rotation.from_matrix(depth_dataset.transformation[:3,:3]).as_rotvec(degrees=True))
+
+	def rotate_A(vis):
+		inc_rot = Rotation.from_euler("xyz", (0.0, -10, 0.0),degrees=True).as_matrix()
+		depth_dataset.transformation[:3,:3] = depth_dataset.transformation[:3,:3] @ inc_rot
+		print("ROT:", Rotation.from_matrix(depth_dataset.transformation[:3,:3]).as_rotvec(degrees=True))
+
+	def rotate_E(vis):
+		inc_rot = Rotation.from_euler("xyz", (0.0, 0.0, -10.0),degrees=True).as_matrix()
+		depth_dataset.transformation[:3,:3] = depth_dataset.transformation[:3,:3] @ inc_rot
+		print("ROT:", Rotation.from_matrix(depth_dataset.transformation[:3,:3]).as_rotvec(degrees=True))
+
+	def rotate_R(vis):
+		inc_rot = Rotation.from_euler("xyz", (0.0, 0.0, 10.0),degrees=True).as_matrix()
+		depth_dataset.transformation[:3,:3] = depth_dataset.transformation[:3,:3] @ inc_rot
+		print("ROT:", Rotation.from_matrix(depth_dataset.transformation[:3,:3]).as_rotvec(degrees=True))	
+
+	def exit_Q(vis):
+		exit()
+	
+	if plot3D:
+		vis = o3d.visualization.VisualizerWithKeyCallback() # pylint: disable=E1101
+		vis.create_window(
+			window_name='Point Cloud', top=0, visible=True
+		)
+
+		vis.register_key_callback(ord('A'), rotate_A)
+		vis.register_key_callback(ord('S'), rotate_S)
+		vis.register_key_callback(ord('D'), rotate_D)
+		vis.register_key_callback(ord('W'), rotate_W)
+		vis.register_key_callback(ord('E'), rotate_E)
+		vis.register_key_callback(ord('R'), rotate_R)
+		vis.register_key_callback(ord('Q'), exit_Q)
+		vis.register_key_callback(ord('Q'), exit)
+
+		pcd = o3d.geometry.PointCloud()
+		vis.add_geometry(pcd)
+	
+	for frame in depth_dataset:
+		disparity_frame = frame['disparity_frame']
+		# disparity_frame_rgb = cv2.cvtColor(disparity_frame, cv2.COLOR_GRAY2BGR)
+		disparity_frame_rgb = cv2.applyColorMap(
+			disparity_frame,
+			cv2.COLORMAP_PLASMA
+		)
+
+
+		rgb_frame = frame['rgb_frame']
+		frame_vis = np.concatenate([
+			rgb_frame,
+			disparity_frame_rgb,
+		], 1)
+		frame_vis = cv2.resize(frame_vis, (0,0), fx=scale, fy=scale)
+
+		if plot3D:
+			vis.remove_geometry(pcd)
+			points = frame['points']
+			pcd = o3d.geometry.PointCloud()
+			pcd.points = o3d.utility.Vector3dVector(points)
+
+			pcd = frame['pcd']
+			vis.add_geometry(pcd)
+			vis.poll_events()
+			vis.update_renderer()
+
+		if plot2D:
+			cv2.imshow('frame', frame_vis)
+			# key = cv2.waitKey(0)
+			key = cv2.waitKey(1)
+			# key = cv2.waitKey(500)
+			if key==ord('q'):
+				break
+
+	exit()
 	dbc_interp = DBCInterpreter("dbc/honda_city.dbc")
 	panda_path = os.path.join("dataset/panda_logs/PANDA_2022-07-21_11:54:32.114482.csv")
 	panda_iter = PandaDatasetIterator(panda_path, dbc_interp=dbc_interp)

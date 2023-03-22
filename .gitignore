@@ -163,3 +163,7 @@ dataset/
 dvr_logs/
 panda_logs/
 tmps/
+
+nohup.out
+
+pix2pix/
