@@ -19,8 +19,11 @@ import pandas as pd
 from tqdm import tqdm
 import cantools
 import yaml
-import open3d as o3d
 from scipy.spatial.transform import Rotation
+
+from torch.multiprocessing import Process, Queue, set_start_method
+from .plotter import generate_3D_frame
+import matplotlib.pyplot as plt
 
 from .dataset_constants import *
 from . import helper
@@ -96,6 +99,7 @@ class BengaluruDepthDatasetIterator:
 		frame = {
 			'rgb_frame': rgb_frame,
 			'disparity_frame': disparity_frame,
+			'csv_frame': csv_frame
 		}
 		
 		for key in csv_frame.keys():
@@ -114,15 +118,11 @@ class BengaluruOccupancyDatasetIterator(BengaluruDepthDatasetIterator):
 		self.cy = self.intrinsic_matrix[1,2]
 		self.focal_length = self.fx
 
-		self.intrinsics = o3d.camera.PinholeCameraIntrinsic(
-			width=self.width, height=self.height,
-			intrinsic_matrix=self.intrinsic_matrix
-		)
 
 		self.transformation = np.eye(4,4)
 		# self.transformation[:3,:3] = Rotation.from_euler("xyz", (-1.70000000e+02,  4.83655339e-15, -6.46097591e-14),degrees=True).as_matrix() # Great Top Down View
 		# self.transformation[:3,3] = [10000.0, 0.0, 0.0]
-		self.transformation[3,:3] = [0.0, 0.0, 10.0]
+		# self.transformation[3,:3] = [0.0, 0.0, 10.0]
 
 	def __getitem__(self, key):
 		frame = super().__getitem__(key)
@@ -134,57 +134,55 @@ class BengaluruOccupancyDatasetIterator(BengaluruDepthDatasetIterator):
 		# depth = (depth - np.min(depth)) / (np.max(depth) - np.min(depth))
 		depth = depth.astype(np.float32)
 
-		print('depth.dtype', depth.dtype, np.max(depth), np.min(depth))
-		print('disparity.dtype', disparity.dtype, np.max(disparity), np.min(disparity))
+		# print('depth.dtype', depth.dtype, np.max(depth), np.min(depth))
+		# print('disparity.dtype', disparity.dtype, np.max(disparity), np.min(disparity))
 
 		# depth[depth>1250.6] = float('inf')
 		# depth[depth>50.0] = float('inf')
-		depth[depth>100.0] = float('inf')
+		# depth[depth>100.0] = float('inf')
 		# depth[
 		# 	:,
 		# 	0:depth.shape[1]//2
 		# ] = float('inf')
-		depth[
+		hide_mask = np.zeros((self.height, self.width), dtype=bool)
+		hide_mask[
 			0:depth.shape[0]//2
 			:,
-		] = float('inf')
+		] = True
+		depth[hide_mask] = float('inf')
 
-		# U, V = np.ix_(np.arange(self.image_resolution[1]), np.arange(self.image_resolution[0])) # pylint: disable=unbalanced-tuple-unpacking
-		# Z = depth.copy()
+
+		U, V = np.ix_(np.arange(self.height), np.arange(self.width)) # pylint: disable=unbalanced-tuple-unpacking
+		Z = depth.copy()
 		
-		# X = (V - self.cx) * Z / self.fx
-		# Y = (U - self.cy) * Z / self.fy
+		X = (V - self.cx) * Z / self.fx
+		Y = (U - self.cy) * Z / self.fy
 
-		# X = X.flatten()
-		# Y = Y.flatten()
-		# Z = Z.flatten()
+		X = X.flatten()
+		Y = Y.flatten()
+		Z = Z.flatten()
 
-		# points = np.array([X,Y,Z]).T
+		points = np.array([X,Y,Z]).T
+		# points = np.array([Y,Z,X]).T
+		
+		B, G, R = rgb_frame[:,:,0], rgb_frame[:,:,1], rgb_frame[:,:,2]
+		B = B.flatten()
+		G = G.flatten()
+		R = R.flatten()
 
-		# print(X.shape)
-		# print(points.shape)
+		# points_colors = np.array([R,G,B]).T /255.0
+		points_colors = np.array([B,G,R]).T /255.0
 
-		rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
-			o3d.geometry.Image(rgb_frame), o3d.geometry.Image(depth),
-			depth_scale=10**2,
-			convert_rgb_to_intensity=False
-		)
-		pcd = o3d.geometry.PointCloud.create_from_rgbd_image(
-			rgbd, self.intrinsics
-		)
-
-		pcd.remove_non_finite_points()
-		pcd.transform(self.transformation)
-
-		points = np.asarray(pcd.points)
-
-		print('points.shape', points.shape)
+		# print('X.shape', X.shape)
+		# print('points.shape', points.shape)
+		# print('points_colors.shape', points_colors.shape)
+		# print('points.shape', points.shape)
 
 		frame['disparity'] = disparity
 		frame['depth'] = depth
 		frame['points'] = points
-		frame['pcd'] = pcd
-
+		frame['points_colors'] = points_colors
+		
 		return frame
 
 class PandaDatasetIterator:
@@ -847,68 +845,64 @@ class DBCInterpreter:
 	def __del__(self):
 		pass
 
+def compute_depth(midas, rgb_frame, transform, device):
+	import torch
+	input_batch = transform(rgb_frame).to(device)
+	with torch.no_grad():
+		prediction = midas(input_batch)
 
-if __name__ == '__main__':
-	depth_dataset = BengaluruOccupancyDatasetIterator()
+		prediction = torch.nn.functional.interpolate(
+			prediction.unsqueeze(1),
+			size=rgb_frame.shape[:2],
+			mode="bicubic",
+			align_corners=False,
+		).squeeze()
+
+	output = prediction.cpu().numpy()
+
+	return output
+
+def calculate_haversine_distance(lat1, lon1, lat2, lon2):
+	"""
+	Calculate the distance between two GPS coordinates using the Haversine formula.
+	"""
+	R = 6371  # Earth radius in kilometers
+	d_lat = math.radians(lat2 - lat1)
+	d_lon = math.radians(lon2 - lon1)
+	a = math.sin(d_lat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(d_lon / 2) ** 2
+	c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+	return R * c * 1000  # Convert to meters
+
+def main(point_cloud_array, plot2D, plot3D):
+	import torch
+	device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+	depth_dataset = BengaluruOccupancyDatasetIterator(
+		dataset_path="~/Datasets/Depth_Dataset_Bengaluru/1658384924059"
+	)
 	scale = 0.3
-	plot2D = True
-	plot3D = True
-	 
 
-	def rotate_W(vis):
-		inc_rot = Rotation.from_euler("xyz", (10, 0.0, 0.0),degrees=True).as_matrix()
-		depth_dataset.transformation[:3,:3] = depth_dataset.transformation[:3,:3] @ inc_rot
-		print("ROT:", Rotation.from_matrix(depth_dataset.transformation[:3,:3]).as_rotvec(degrees=True))
+	model_type = "DPT_Large"     # MiDaS v3 - Large     (highest accuracy, slowest inference speed)
+	#model_type = "DPT_Hybrid"   # MiDaS v3 - Hybrid    (medium accuracy, medium inference speed)
+	#model_type = "MiDaS_small"  # MiDaS v2.1 - Small   (lowest accuracy, highest inference speed)
 
-	def rotate_S(vis):
-		inc_rot = Rotation.from_euler("xyz", (-10, 0.0, 0.0),degrees=True).as_matrix()
-		depth_dataset.transformation[:3,:3] = depth_dataset.transformation[:3,:3] @ inc_rot
-		print("ROT:", Rotation.from_matrix(depth_dataset.transformation[:3,:3]).as_rotvec(degrees=True))
+	midas = torch.hub.load("intel-isl/MiDaS", model_type)
+	midas_transforms = torch.hub.load("intel-isl/MiDaS", "transforms")
+
+	if model_type == "DPT_Large" or model_type == "DPT_Hybrid":
+		transform = midas_transforms.dpt_transform
+	else:
+		transform = midas_transforms.small_transform
 	
-	def rotate_D(vis):
-		inc_rot = Rotation.from_euler("xyz", (0.0, 10, 0.0),degrees=True).as_matrix()
-		depth_dataset.transformation[:3,:3] = depth_dataset.transformation[:3,:3] @ inc_rot
-		print("ROT:", Rotation.from_matrix(depth_dataset.transformation[:3,:3]).as_rotvec(degrees=True))
+	midas.to(device)
+	midas.eval()
 
-	def rotate_A(vis):
-		inc_rot = Rotation.from_euler("xyz", (0.0, -10, 0.0),degrees=True).as_matrix()
-		depth_dataset.transformation[:3,:3] = depth_dataset.transformation[:3,:3] @ inc_rot
-		print("ROT:", Rotation.from_matrix(depth_dataset.transformation[:3,:3]).as_rotvec(degrees=True))
 
-	def rotate_E(vis):
-		inc_rot = Rotation.from_euler("xyz", (0.0, 0.0, -10.0),degrees=True).as_matrix()
-		depth_dataset.transformation[:3,:3] = depth_dataset.transformation[:3,:3] @ inc_rot
-		print("ROT:", Rotation.from_matrix(depth_dataset.transformation[:3,:3]).as_rotvec(degrees=True))
+	if plot2D:
+		plt.ion()
 
-	def rotate_R(vis):
-		inc_rot = Rotation.from_euler("xyz", (0.0, 0.0, 10.0),degrees=True).as_matrix()
-		depth_dataset.transformation[:3,:3] = depth_dataset.transformation[:3,:3] @ inc_rot
-		print("ROT:", Rotation.from_matrix(depth_dataset.transformation[:3,:3]).as_rotvec(degrees=True))	
-
-	def exit_Q(vis):
-		exit()
-	
-	if plot3D:
-		vis = o3d.visualization.VisualizerWithKeyCallback() # pylint: disable=E1101
-		vis.create_window(
-			window_name='Point Cloud', top=0, visible=True
-		)
-
-		vis.register_key_callback(ord('A'), rotate_A)
-		vis.register_key_callback(ord('S'), rotate_S)
-		vis.register_key_callback(ord('D'), rotate_D)
-		vis.register_key_callback(ord('W'), rotate_W)
-		vis.register_key_callback(ord('E'), rotate_E)
-		vis.register_key_callback(ord('R'), rotate_R)
-		vis.register_key_callback(ord('Q'), exit_Q)
-		vis.register_key_callback(ord('Q'), exit)
-
-		pcd = o3d.geometry.PointCloud()
-		vis.add_geometry(pcd)
-	
 	for frame in depth_dataset:
 		disparity_frame = frame['disparity_frame']
-		# disparity_frame_rgb = cv2.cvtColor(disparity_frame, cv2.COLOR_GRAY2BGR)
 		disparity_frame_rgb = cv2.applyColorMap(
 			disparity_frame,
 			cv2.COLORMAP_PLASMA
@@ -916,58 +910,54 @@ if __name__ == '__main__':
 
 
 		rgb_frame = frame['rgb_frame']
+
+		depth_pred = compute_depth(midas, rgb_frame, transform, device)
+		depth_pred = (depth_pred - np.min(depth_pred)) / (np.max(depth_pred) - np.min(depth_pred))
+		print('depth_pred.shape', depth_pred.shape, np.min(depth_pred), np.max(depth_pred))
+		depth_pred_rgb = cv2.applyColorMap(
+			(depth_pred * 255).astype(np.uint8),
+			cv2.COLORMAP_PLASMA
+		)
+
 		frame_vis = np.concatenate([
 			rgb_frame,
 			disparity_frame_rgb,
-		], 1)
+			depth_pred_rgb
+		], 0)
 		frame_vis = cv2.resize(frame_vis, (0,0), fx=scale, fy=scale)
+		frame_vis = cv2.cvtColor(frame_vis, cv2.COLOR_BGR2RGB)
 
 		if plot3D:
-			vis.remove_geometry(pcd)
 			points = frame['points']
-			pcd = o3d.geometry.PointCloud()
-			pcd.points = o3d.utility.Vector3dVector(points)
-
-			pcd = frame['pcd']
-			vis.add_geometry(pcd)
-			vis.poll_events()
-			vis.update_renderer()
+			points_colors = frame['points_colors']
+			
+			point_cloud_array.put(generate_3D_frame(
+				points,
+				points_colors
+			))
 
 		if plot2D:
-			cv2.imshow('frame', frame_vis)
-			# key = cv2.waitKey(0)
-			key = cv2.waitKey(1)
-			# key = cv2.waitKey(500)
-			if key==ord('q'):
-				break
+			plt.imshow(frame_vis)
+			plt.pause(0.01)
+			plt.show()
 
-	exit()
-	dbc_interp = DBCInterpreter("dbc/honda_city.dbc")
-	panda_path = os.path.join("dataset/panda_logs/PANDA_2022-07-21_11:54:32.114482.csv")
-	panda_iter = PandaDatasetIterator(panda_path, dbc_interp=dbc_interp)
-	phone_iter = AndroidDatasetIterator('dataset/android/1658384924059')
-	merged_iter = MergedDatasetIterator(panda_iter=panda_iter, phone_iter=phone_iter, compute_trajectory=False)
-
-	# print(panda_iter)
-	# print(phone_iter)
-	print(merged_iter)
-	small = merged_iter[
-		int(merged_iter.fps*30):
-		int(merged_iter.fps*60)
-	]
-	small.compute_slam()
-	# # small = merged_iter
-	# print(small)
-
-	# for data_frame in small:
-	# 	phone_data_frame, phone_img_frame = data_frame['phone_frame']
-	# 	panda_data_frame = data_frame['panda_frame']
-	# 	frame = cv2.resize(phone_img_frame, (0,0), fx=0.25, fy=0.25)
-	# 	cv2.imshow('frame', frame)
-	# 	key = cv2.waitKey(1000)
-	# 	if key==ord('q'):
-	# 		break
-	# for frame in merged_iter:
-	# 	print(frame)
-
+if __name__ == '__main__':
 	
+	plot2D = True
+	plot3D = True
+	point_cloud_array = None
+	
+	if plot3D:
+		set_start_method('spawn')
+		point_cloud_array = Queue()
+
+	if plot3D:
+		image_loop_proc = Process(target=main, args=(point_cloud_array, plot2D, plot3D))
+		image_loop_proc.start()
+		
+		from . import plotter
+		plotter.start_graph(point_cloud_array)
+
+		image_loop_proc.join()
+	else:
+		main(None, plot2D, False)
