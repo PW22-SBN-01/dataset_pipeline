@@ -913,7 +913,6 @@ def main(point_cloud_array, plot2D, plot3D):
 
 		depth_pred = compute_depth(midas, rgb_frame, transform, device)
 		depth_pred = (depth_pred - np.min(depth_pred)) / (np.max(depth_pred) - np.min(depth_pred))
-		print('depth_pred.shape', depth_pred.shape, np.min(depth_pred), np.max(depth_pred))
 		depth_pred_rgb = cv2.applyColorMap(
 			(depth_pred * 255).astype(np.uint8),
 			cv2.COLORMAP_PLASMA
@@ -940,6 +939,10 @@ def main(point_cloud_array, plot2D, plot3D):
 			plt.imshow(frame_vis)
 			plt.pause(0.01)
 			plt.show()
+
+			# Check if 'q' key is pressed
+			if plt.waitforbuttonpress(0.01) and plt.ginput(1)[0][1] < 0:
+				break
 
 if __name__ == '__main__':
 	
