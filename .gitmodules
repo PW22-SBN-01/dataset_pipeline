@@ -1,6 +1,3 @@
-[submodule "dataset_helper/extras/pyslam"]
-	path = dataset_helper/extras/pyslam
-	url = https://github.com/PW22-SBN-01/pyslam
 [submodule "BoostYourOwnDepth"]
 	path = BoostYourOwnDepth
 	url = https://github.com/PW22-SBN-01/BoostYourOwnDepth
