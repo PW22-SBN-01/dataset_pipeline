@@ -38,8 +38,8 @@ if __name__ == "__main__":
     DATASET_LIST.sort()
     DATASET_LIST = DATASET_LIST[3:]
     DATASET_LIST = [
-        "/home/aditya/Datasets/dataset/android/1658384924059",
-        "/home/aditya/Datasets/dataset/android/calibration"
+        os.path.expanduser("~/Datasets/dataset/android/1658384924059"),
+        os.path.expanduser("~/Datasets/dataset/android/calibration"),
     ]
     print('DATASET_LIST', DATASET_LIST)
     
