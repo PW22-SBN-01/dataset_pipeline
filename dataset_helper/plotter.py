@@ -128,6 +128,7 @@ def start_graph(points_q):
 	w.addItem(g)
 
 	graph_region = gl.GLScatterPlotItem(pos=np.zeros((1, 3), dtype=np.float32), color=(0, 1, 0, 0.5), size=0.025, pxMode=False)
+	# graph_region = gl.GLScatterPlotItem(pos=np.zeros((1, 3), dtype=np.float32), color=(0, 1, 0, 0.5), size=0.1, pxMode=False)
 	# graph_region.translate(0, 0, 1.7)
 	graph_region.rotate(-90, 1, 0, 0)
 
