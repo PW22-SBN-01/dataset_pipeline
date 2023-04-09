@@ -76,7 +76,9 @@ class BengaluruDepthDatasetIterator:
 		return self
 
 	def __next__(self):
-		data = self.__getitem__(self.line_no)
+		if self.line_no>=self.__len__():
+			raise StopIteration
+		data = self[self.line_no]
 		self.line_no += 1
 		return data
 
