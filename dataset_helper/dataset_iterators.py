@@ -34,7 +34,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class BengaluruDepthDatasetIterator:
 	
-	def __init__(self, dataset_path="~/Datasets/Depth_Dataset_Bengaluru/1653972957447", settings_doc="calibration/pocoX3/calib.yaml") -> None:
+	def __init__(self, dataset_path="~/Datasets/Depth_Dataset_Bengaluru/1653972957447", settings_doc="~/Datasets/Depth_Dataset_Bengaluru/calibration/pocoX3/calib.yaml") -> None:
 		self.dataset_path = os.path.expanduser(dataset_path)
 		self.dataset_id = self.dataset_path.split("/")[-1]
 		self.rgb_img_folder = os.path.join(self.dataset_path, "rgb_img")
@@ -46,7 +46,7 @@ class BengaluruDepthDatasetIterator:
 		os.path.isdir(self.depth_img_folder)
 		os.path.isfile(self.csv_path)
 	
-		self.settings_doc = settings_doc
+		self.settings_doc = os.path.expanduser(settings_doc)
 		with open(self.settings_doc, 'r') as stream:
 			try:
 				self.cam_settings = yaml.load(stream, Loader=yaml.FullLoader)
@@ -116,7 +116,7 @@ class BengaluruOccupancyDatasetIterator(BengaluruDepthDatasetIterator):
 
 	def __init__(self,
 		dataset_path="~/Datasets/Depth_Dataset_Bengaluru/1653972957447",
-		settings_doc="calibration/pocoX3/calib.yaml",
+		settings_doc="~/Datasets/Depth_Dataset_Bengaluru/calibration/pocoX3/calib.yaml",
 		grid_size = (40.0, 30.0, 4.0), # (128/grid_scale[0], 128/grid_scale[1], 8/grid_scale[2])
 		scale = (10.0, 10.0, 10.0), # voxels per meter
 	) -> None:
@@ -569,7 +569,7 @@ class MergedDatasetIterator:
 	def __init__(self, 
 		phone_iter: AndroidDatasetIterator, 
 		panda_iter: PandaDatasetIterator, 
-		settings_doc="calibration/pocoX3/calib.yaml", 
+		settings_doc="~/Datasets/Depth_Dataset_Bengaluru/calibration/pocoX3/calib.yaml", 
 		compute_trajectory=False, 
 		invalidate_cache=False,
 		start_index=None,
@@ -1099,11 +1099,12 @@ if __name__ == '__main__':
 	plot2D = True
 	plot3D = True
 	point_cloud_array = None
+	main = main_depth
 	
 	if plot3D:
 		set_start_method('spawn')
 		point_cloud_array = Queue()
-		image_loop_proc = Process(target=main_depth, args=(point_cloud_array, plot2D, plot3D))
+		image_loop_proc = Process(target=main, args=(point_cloud_array, plot2D, plot3D))
 		image_loop_proc.start()
 		
 		from . import plotter
@@ -1111,4 +1112,4 @@ if __name__ == '__main__':
 
 		image_loop_proc.join()
 	else:
-		main_depth(None, plot2D, False)
+		main(None, plot2D, False)
