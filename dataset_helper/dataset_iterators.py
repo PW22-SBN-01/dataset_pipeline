@@ -18,7 +18,6 @@ import cv2
 import itertools
 import pandas as pd
 from tqdm import tqdm
-import cantools
 import yaml
 from scipy.spatial.transform import Rotation
 
@@ -39,11 +38,13 @@ class BengaluruDepthDatasetIterator:
 		self.dataset_id = self.dataset_path.split("/")[-1]
 		self.rgb_img_folder = os.path.join(self.dataset_path, "rgb_img")
 		self.depth_img_folder = os.path.join(self.dataset_path, "depth_img")
+		self.seg_img_folder = os.path.join(self.dataset_path, "seg_img")
 		self.csv_path = os.path.join(self.dataset_path, self.dataset_id + ".csv")
 		
 		os.path.isdir(self.dataset_path)
 		os.path.isdir(self.rgb_img_folder)
 		os.path.isdir(self.depth_img_folder)
+		os.path.isdir(self.seg_img_folder)
 		os.path.isfile(self.csv_path)
 	
 		self.settings_doc = os.path.expanduser(settings_doc)
@@ -90,12 +91,15 @@ class BengaluruDepthDatasetIterator:
 		timestamp = str(int(csv_frame[1]))
 		# timestamp = str(csv_frame[1])
 		disparity_frame_path = os.path.join(self.depth_img_folder, timestamp + ".png")
+		seg_frame_path = os.path.join(self.seg_img_folder, timestamp + ".png")
 		rgb_frame_path = os.path.join(self.rgb_img_folder, timestamp + ".png")
 		
 		assert os.path.isfile(disparity_frame_path), "File missing " + disparity_frame_path
+		assert os.path.isfile(seg_frame_path), "File missing " + seg_frame_path
 		assert os.path.isfile(rgb_frame_path), "File missing " + rgb_frame_path
 
 		disparity_frame = cv2.imread(disparity_frame_path)
+		seg_frame = cv2.imread(seg_frame_path)
 		rgb_frame = cv2.imread(rgb_frame_path)
 
 		disparity_frame = cv2.cvtColor(disparity_frame, cv2.COLOR_BGR2GRAY)
@@ -103,6 +107,7 @@ class BengaluruDepthDatasetIterator:
 		frame = {
 			'rgb_frame': rgb_frame,
 			'disparity_frame': disparity_frame,
+			'seg_frame': seg_frame,
 			'csv_frame': csv_frame
 		}
 		
@@ -898,6 +903,7 @@ class DBCInterpreter:
 	"""
 
 	def __init__(self, dbc_path="dbc/honda_city.dbc") -> None:
+		import cantools
 		print("dbc_path:", dbc_path)
 		self.dbc_path = dbc_path
 		self.db = cantools.database.load_file(self.dbc_path)
@@ -1018,6 +1024,44 @@ def main_grid(point_cloud_array, plot2D, plot3D):
 				print("Key pressed, exiting...")
 				exit()
 
+def main_depth_seg(point_cloud_array, plot2D, plot3D):
+	depth_dataset = BengaluruDepthDatasetIterator(
+		dataset_path="~/Datasets/Depth_Dataset_Bengaluru/1658384924059"
+	)
+	scale = 0.3
+
+	if plot2D:
+		plt.ion()
+
+	for frame in depth_dataset:
+		disparity_frame = frame['disparity_frame']
+		seg_frame = frame['seg_frame']
+		disparity_frame_rgb = cv2.applyColorMap(
+			disparity_frame,
+			cv2.COLORMAP_PLASMA
+		)
+
+		rgb_frame = frame['rgb_frame']
+
+		frame_vis = np.concatenate([
+			rgb_frame,
+			disparity_frame_rgb,
+			seg_frame
+		], 0)
+		frame_vis = cv2.resize(frame_vis, (0,0), fx=scale, fy=scale)
+		frame_vis = cv2.cvtColor(frame_vis, cv2.COLOR_BGR2RGB)
+
+		if plot2D:
+			plt.imshow(frame_vis)
+			plt.pause(0.01)
+			plt.show()
+
+			# Check if key is pressed
+			if plt.waitforbuttonpress(0.001):
+				print("Key pressed, exiting...")
+				exit()
+
+
 def main_depth(point_cloud_array, plot2D, plot3D):
 	import torch
 	device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -1097,9 +1141,10 @@ def main_depth(point_cloud_array, plot2D, plot3D):
 if __name__ == '__main__':
 	
 	plot2D = True
-	plot3D = True
+	plot3D = False
 	point_cloud_array = None
 	main = main_depth
+	# main = main_depth_seg
 	
 	if plot3D:
 		set_start_method('spawn')
