@@ -29,13 +29,13 @@ if __name__ == "__main__":
     os.makedirs(TRAJECTORY_DATASET_DIR, exist_ok=True)
 
 
-    DATASET_LIST.sort()
+    # DATASET_LIST.sort()
     # DATASET_LIST = DATASET_LIST[3:]
-    # DATASET_LIST = [
-    #     os.path.expanduser("~/Datasets/dataset/android/1658384707877"),
-    #     # os.path.expanduser("~/Datasets/dataset/android/1658384924059"),
-    #     # os.path.expanduser("~/Datasets/dataset/android/calibration"),
-    # ]
+    DATASET_LIST = [
+        os.path.expanduser("~/Datasets/dataset/android/1658384707877"),
+        # os.path.expanduser("~/Datasets/dataset/android/1658384924059"),
+        # os.path.expanduser("~/Datasets/dataset/android/calibration"),
+    ]
     print('DATASET_LIST', DATASET_LIST)
     
     for android_dataset_path in DATASET_LIST:
@@ -50,20 +50,20 @@ if __name__ == "__main__":
         dataset_id = android_dataset_path.split('/')[-1]
         TRAJECTORY_SUBFOLDER = os.path.join(TRAJECTORY_DATASET_DIR, dataset_id)
         RGB_FOLDER = os.path.join(TRAJECTORY_SUBFOLDER, "rgb_img")
-        TRAJECTORY_FOLDER = os.path.join(TRAJECTORY_SUBFOLDER, "trajectory_img")
+        # TRAJECTORY_FOLDER = os.path.join(TRAJECTORY_SUBFOLDER, "trajectory_img")
         # TRAJECTORY_NPY_FOLDER = os.path.join(TRAJECTORY_SUBFOLDER, "trajectory_npy")
         CSV_PATH = os.path.join(TRAJECTORY_SUBFOLDER, dataset_id+"_traj.csv")
 
         os.makedirs(TRAJECTORY_SUBFOLDER, exist_ok=True)
         os.makedirs(RGB_FOLDER, exist_ok=True)
-        os.makedirs(TRAJECTORY_FOLDER, exist_ok=True)
+        # os.makedirs(TRAJECTORY_FOLDER, exist_ok=True)
         # os.makedirs(TRAJECTORY_NPY_FOLDER, exist_ok=True)
 
         print('dataset_id', dataset_id)
 
         # if args.gen_traj and not os.path.isfile(CSV_PATH):
         if args.gen_traj:
-            print('Generating RGB data: ', RGB_FOLDER)
+            print('Generating Trajectory data: ', RGB_FOLDER)
 
             csv_data = {
                 'Timestamp'    : [],

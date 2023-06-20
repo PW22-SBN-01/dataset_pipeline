@@ -86,12 +86,12 @@ if __name__ == "__main__":
     SEG_DATASET_DIR = args.seg_dataset_dir
     os.makedirs(SEG_DATASET_DIR, exist_ok=True)
 
-    DATASET_LIST.sort()
+    # DATASET_LIST.sort()
     # DATASET_LIST = DATASET_LIST[3:]
-    # DATASET_LIST = [
-    #     os.path.expanduser("~/Datasets/dataset/android/1658384924059"),
-    #     # os.path.expanduser("~/Datasets/dataset/android/calibration"),
-    # ]
+    DATASET_LIST = [
+        os.path.expanduser("~/Datasets/dataset/android/1658384707877"),
+        # os.path.expanduser("~/Datasets/dataset/android/calibration"),
+    ]
     print('DATASET_LIST', DATASET_LIST)
 
     assert args.gen_rgb or args.gen_seg, "Nothing to do"
@@ -148,8 +148,9 @@ if __name__ == "__main__":
             #     range(int(dataset.start_time_csv), int(dataset.end_time_csv), int(1000.0/dataset.fps))
             # ): # ms
                 # frame = dataset.get_item_by_timestamp(timestmap)
+            for index in tqdm(range(0, len(dataset)-50, 1)): # 10 FPS
             # for index in tqdm(range(0, len(dataset)-50, 2)): # 10 FPS
-            for index in tqdm(range(0, len(dataset)-50, 20)): # 1 FPS
+            # for index in tqdm(range(0, len(dataset)-50, 20)): # 1 FPS
                 try:
                     frame = dataset[index]
                     frame_csv, frame_img = frame
